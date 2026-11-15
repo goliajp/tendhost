@@ -1,0 +1,16 @@
+[package]
+name = "tendhost-agents"
+description = "The coding agents on managed hosts: which are installed, their accounts, usage and limits"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+tendhost-kernel.workspace = true
+tendhost-store.workspace = true
+tendhost-http.workspace = true
+axum.workspace = true
+chrono.workspace = true
+serde.workspace = true
+tracing.workspace = true

@@ -15,6 +15,7 @@ tendhost-audit.workspace = true
 tendhost-hosts.workspace = true
 tendhost-telemetry.workspace = true
 tendhost-jobs.workspace = true
+tendhost-agents.workspace = true
 tendhost-gateway.workspace = true
 anyhow.workspace = true
 axum.workspace = true

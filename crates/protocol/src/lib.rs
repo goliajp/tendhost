@@ -7,7 +7,7 @@
 //! Both sides tolerate kinds they do not know (`Unknown`), so a newer
 //! daemon can talk to an older server and the reverse.
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
 pub const VERSION: u32 = 1;
@@ -69,6 +69,7 @@ pub enum ReportBody {
     Facts(Facts),
     Metrics(Metrics),
     RunFinished(RunResult),
+    Agents(AgentsReport),
     #[serde(other)]
     Unknown,
 }
@@ -115,9 +116,80 @@ pub struct Disk {
     pub used_bytes: u64,
 }
 
+/// The coding agents found on the host.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AgentsReport {
+    pub agents: Vec<AgentReport>,
+}
+
+/// One kind of coding agent on the host. Without `detail` this says only
+/// that it is installed; the detail is sent for the agents the server has
+/// asked to track.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AgentReport {
+    /// `claude`, `codex`, `gemini`, `kimi`
+    pub agent: String,
+    pub account_count: u32,
+    /// whether this agent keeps token counts the daemon can read
+    pub supports_usage: bool,
+    /// whether this agent keeps its limit windows where the daemon can
+    /// read them
+    pub supports_limits: bool,
+    pub detail: Option<AgentDetail>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AgentDetail {
+    pub accounts: Vec<AgentAccount>,
+    /// token totals per day and model; a day is sent whole each time, so
+    /// the newest report for a day replaces the earlier ones
+    pub usage: Vec<UsageDay>,
+    pub limits: Option<LimitReading>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentAccount {
+    /// the login directory, e.g. `/home/ada/.claude`
+    pub dir: String,
+    /// the signed-in address when the agent keeps it outside its
+    /// credentials, else the directory name
+    pub label: String,
+    pub plan: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UsageDay {
+    /// UTC
+    pub day: NaiveDate,
+    pub model: String,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cache_read_tokens: u64,
+    pub cache_write_tokens: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LimitReading {
+    pub observed_at: DateTime<Utc>,
+    pub plan: Option<String>,
+    pub windows: Vec<LimitWindow>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LimitWindow {
+    /// e.g. `5h`, `7d`
+    pub name: String,
+    /// 0.0 to 1.0
+    pub used_ratio: f32,
+    pub resets_at: Option<DateTime<Utc>>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Directive {
+    /// send the detail of these agents from now on, and of no others; sent
+    /// with every sync
+    TrackAgents { agents: Vec<String> },
     /// run this command and report a [`RunResult`] for `run_id`
     RunJob {
         run_id: String,

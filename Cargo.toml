@@ -18,6 +18,7 @@ tendhost-protocol = { path = "crates/protocol" }
 tendhost-hosts = { path = "crates/hosts" }
 tendhost-telemetry = { path = "crates/telemetry" }
 tendhost-jobs = { path = "crates/jobs" }
+tendhost-agents = { path = "crates/agents" }
 tendhost-gateway = { path = "crates/gateway" }
 tendhost-server = { path = "crates/server" }
 
