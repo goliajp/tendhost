@@ -1,0 +1,18 @@
+[package]
+name = "tendhost-identity"
+description = "People who sign in to tendhost: first-run setup, users, sessions, api tokens"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+tendhost-kernel.workspace = true
+tendhost-store.workspace = true
+tendhost-http.workspace = true
+argon2.workspace = true
+axum.workspace = true
+chrono.workspace = true
+rand.workspace = true
+serde.workspace = true
+tokio.workspace = true

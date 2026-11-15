@@ -1,0 +1,18 @@
+[package]
+name = "tendhost-audit"
+description = "The append-only record of who did what in tendhost, derived from the event bus"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+tendhost-kernel.workspace = true
+tendhost-store.workspace = true
+tendhost-http.workspace = true
+axum.workspace = true
+serde.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+chrono.workspace = true
