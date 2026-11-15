@@ -38,11 +38,15 @@ impl Config {
         })
     }
 
-    /// Where a browser should be pointed.
+    /// Where a browser on this machine should be pointed. An address
+    /// that listens on every interface is opened through loopback.
     pub fn url(&self) -> String {
         self.public_url
             .clone()
-            .unwrap_or_else(|| format!("http://{}", self.listen))
+            .unwrap_or_else(|| match self.listen.ip().is_unspecified() {
+                true => format!("http://127.0.0.1:{}", self.listen.port()),
+                false => format!("http://{}", self.listen),
+            })
     }
 
     pub fn served_over_https(&self) -> bool {
@@ -71,6 +75,12 @@ mod tests {
         assert_eq!(c.listen.to_string(), "127.0.0.1:7080");
         assert_eq!(c.url(), "http://127.0.0.1:7080");
         assert!(!c.served_over_https());
+    }
+
+    #[test]
+    fn listening_everywhere_is_opened_through_loopback() {
+        let c = config(&[("TENDHOST_LISTEN", "0.0.0.0:7080")]).unwrap();
+        assert_eq!(c.url(), "http://127.0.0.1:7080");
     }
 
     #[test]

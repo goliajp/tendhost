@@ -73,8 +73,9 @@ impl App {
 /// What the server needs to know about where it runs.
 #[derive(Debug, Clone, Default)]
 pub struct Settings {
-    /// The address people and hosts reach the server at.
-    pub public_url: String,
+    /// The address people and hosts reach the server at, when it is not
+    /// the one their requests already name.
+    pub public_url: Option<String>,
     /// Mark the session cookie `Secure`.
     pub secure_cookies: bool,
 }
@@ -163,7 +164,9 @@ pub fn assemble(store: &Store, clock: Arc<dyn Clock>, settings: Settings) -> Res
         .route("/healthz", get(|| async { "ok" }))
         .route(
             "/install.sh",
-            get(move || install::serve(settings.public_url.clone())),
+            get(move |headers: axum::http::HeaderMap| {
+                install::serve(settings.public_url.clone(), headers)
+            }),
         )
         .nest("/api/v1", api)
         .merge(tendhost_gateway::router(
