@@ -279,7 +279,7 @@ async fn health_needs_no_credential() {
 async fn the_install_script_is_public_and_an_unknown_endpoint_is_a_json_error() {
     let store = Store::temp().unwrap();
     let settings = tendhost_server::Settings {
-        public_url: "https://tend.example.com".into(),
+        public_url: Some("https://tend.example.com".into()),
         secure_cookies: true,
     };
     let router = tendhost_server::assemble(&store, Arc::new(SystemClock), settings)
@@ -300,6 +300,25 @@ async fn the_install_script_is_public_and_an_unknown_endpoint_is_a_json_error() 
     )
     .unwrap();
     assert!(script.contains("SERVER=\"https://tend.example.com\""));
+
+    // without a configured address the script names the one the request used
+    let store = Store::temp().unwrap();
+    let plain = tendhost_server::assemble(&store, Arc::new(SystemClock), Default::default())
+        .unwrap()
+        .router;
+    let request = Request::get("/install.sh")
+        .header("host", "192.168.1.9:7080")
+        .body(Body::empty())
+        .unwrap();
+    let response = plain.oneshot(request).await.unwrap();
+    let script = String::from_utf8(
+        to_bytes(response.into_body(), 1 << 20)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    assert!(script.contains("SERVER=\"http://192.168.1.9:7080\""));
 
     let missing = call(&router, "GET", "/api/v1/nothing", None, None).await;
     assert_eq!(missing.status, StatusCode::NOT_FOUND);
