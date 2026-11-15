@@ -102,7 +102,13 @@ async fn execute(cli: Cli) -> Result<()> {
             println!("Start reporting with: tendhostd run");
             Ok(())
         }
-        Command::Run => run::run(Config::load(&path)?).await,
+        Command::Run => {
+            run::run(
+                Config::load(&path)?,
+                Some(path.with_file_name("outbox.json")),
+            )
+            .await
+        }
     }
 }
 

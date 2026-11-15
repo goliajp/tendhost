@@ -68,8 +68,23 @@ pub struct Report {
 pub enum ReportBody {
     Facts(Facts),
     Metrics(Metrics),
+    RunFinished(RunResult),
     #[serde(other)]
     Unknown,
+}
+
+/// How a command the server asked for ended.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunResult {
+    pub run_id: String,
+    /// absent when the command was killed or never started
+    pub exit_code: Option<i32>,
+    /// the host stopped it at the timeout
+    pub timed_out: bool,
+    /// the end of what it printed, stdout and stderr together
+    pub output: String,
+    pub started_at: DateTime<Utc>,
+    pub finished_at: DateTime<Utc>,
 }
 
 /// What rarely changes about a host.
@@ -103,8 +118,12 @@ pub struct Disk {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Directive {
-    /// version 1 defines no directive yet; the variant keeps the slot so a
-    /// daemon ignores the ones a later server sends
+    /// run this command and report a [`RunResult`] for `run_id`
+    RunJob {
+        run_id: String,
+        command: String,
+        timeout_secs: u32,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -148,6 +167,24 @@ mod tests {
         let directive: Directive =
             serde_json::from_value(json!({ "kind": "reboot", "in": 5 })).unwrap();
         assert_eq!(directive, Directive::Unknown);
+    }
+
+    #[test]
+    fn a_directive_is_flat_json_tagged_by_kind() {
+        let directive = Directive::RunJob {
+            run_id: "run_1".into(),
+            command: "true".into(),
+            timeout_secs: 60,
+        };
+        let wire = serde_json::to_value(&directive).unwrap();
+        assert_eq!(
+            wire,
+            json!({ "kind": "run_job", "run_id": "run_1", "command": "true", "timeout_secs": 60 })
+        );
+        assert_eq!(
+            serde_json::from_value::<Directive>(wire).unwrap(),
+            directive
+        );
     }
 
     #[test]

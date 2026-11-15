@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use tendhost_hostd::client::{Client, Synced};
 use tendhost_hostd::collect;
 use tendhost_hostd::config::Config;
-use tendhost_hostd::run::{Removed, Reporter};
+use tendhost_hostd::run::{Idle, Removed, Reporter};
 use tendhost_kernel::SystemClock;
 use tendhost_protocol::Mode;
 use tendhost_store::Store;
@@ -82,17 +82,31 @@ impl Server {
     }
 
     async fn enroll(&self, name: &str) -> Config {
+        self.enroll_as(name, Mode::Observe).await
+    }
+
+    async fn post(&self, path: &str, body: Value) -> (u16, Value) {
+        let request = self
+            .http
+            .post(format!("{}{path}", self.url))
+            .bearer_auth(&self.owner)
+            .json(&body);
+        let response = request.send().await.unwrap();
+        (response.status().as_u16(), response.json().await.unwrap())
+    }
+
+    async fn enroll_as(&self, name: &str, mode: Mode) -> Config {
         let token = self.enrollment_token().await;
         let client = Client::new(&self.url).unwrap();
         let enrolled = client
-            .enroll(&token, name, Mode::Observe, collect::facts().unwrap())
+            .enroll(&token, name, mode, collect::facts().unwrap())
             .await
             .unwrap();
         Config {
             server: self.url.clone(),
             host_id: enrolled.host_id,
             credential: enrolled.credential,
-            mode: Mode::Observe,
+            mode,
         }
     }
 }
@@ -101,7 +115,7 @@ impl Server {
 async fn an_enrolled_daemon_shows_up_with_this_machines_facts_and_measurements() {
     let server = Server::start().await;
     let config = server.enroll("End To End").await;
-    let mut reporter = Reporter::new(config.clone()).unwrap();
+    let mut reporter = Reporter::new(config.clone(), None).unwrap();
     let wait = reporter.cycle().await.unwrap();
     assert_eq!(wait.as_secs(), 30);
     reporter.cycle().await.unwrap();
@@ -159,7 +173,11 @@ async fn a_daemon_whose_host_was_removed_is_told_so() {
         client.sync(&config.credential, vec![]).await.unwrap(),
         Synced::Rejected
     ));
-    let error = Reporter::new(config).unwrap().cycle().await.unwrap_err();
+    let error = Reporter::new(config, None)
+        .unwrap()
+        .cycle()
+        .await
+        .unwrap_err();
     assert!(error.is::<Removed>());
 }
 
@@ -171,7 +189,87 @@ async fn an_unreachable_server_is_an_error_and_not_a_removal() {
         credential: "thh_x".into(),
         mode: Mode::Observe,
     };
-    let error = Reporter::new(config).unwrap().cycle().await.unwrap_err();
+    let error = Reporter::new(config, None)
+        .unwrap()
+        .cycle()
+        .await
+        .unwrap_err();
     assert!(!error.is::<Removed>());
     assert!(format!("{error:#}").contains("reaching http://127.0.0.1:9"));
+}
+
+#[tokio::test]
+async fn a_job_runs_on_a_managing_host_and_its_output_comes_back() {
+    let server = Server::start().await;
+    let config = server.enroll_as("worker", Mode::Manage).await;
+    let job = json!({ "name": "hello", "host_id": config.host_id, "command": "echo hello from $(uname -s); exit 4",
+        "timeout_secs": 30, "schedule": { "kind": "manual" } });
+    let (status, job) = server.post("/api/v1/jobs", job).await;
+    assert_eq!(status, 201, "{job}");
+    let job_id = job["id"].as_str().unwrap();
+    let (status, _) = server
+        .post(&format!("/api/v1/jobs/{job_id}/runs"), json!({}))
+        .await;
+    assert_eq!(status, 201);
+
+    let mut reporter = Reporter::new(config, None).unwrap();
+    reporter.cycle().await.unwrap();
+    assert!(matches!(
+        reporter.idle(std::time::Duration::from_secs(20)).await,
+        Idle::ResultReady
+    ));
+    reporter.deliver_results().await.unwrap();
+
+    let runs = server.get(&format!("/api/v1/jobs/{job_id}/runs")).await;
+    assert_eq!(runs.as_array().unwrap().len(), 1);
+    assert_eq!(runs[0]["state"], "failed");
+    assert_eq!(runs[0]["exit_code"], 4);
+    assert!(
+        runs[0]["output"]
+            .as_str()
+            .unwrap()
+            .starts_with("hello from ")
+    );
+}
+
+#[tokio::test]
+async fn the_server_refuses_a_job_for_a_host_that_only_reports() {
+    let server = Server::start().await;
+    let config = server.enroll("watcher").await;
+    let job = json!({ "name": "x", "host_id": config.host_id, "command": "true", "schedule": { "kind": "manual" } });
+    let (status, reply) = server.post("/api/v1/jobs", job).await;
+    assert_eq!(status, 422);
+    assert!(
+        reply["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("--manage")
+    );
+}
+
+#[tokio::test]
+async fn reports_made_while_the_server_is_away_are_kept_on_disk_and_delivered_later() {
+    let server = Server::start().await;
+    let config = server.enroll("patient").await;
+    let dir = tempfile::tempdir().unwrap();
+    let spool = dir.path().join("outbox.json");
+
+    let away = Config {
+        server: "http://127.0.0.1:9".into(),
+        ..config.clone()
+    };
+    let mut reporter = Reporter::new(away, Some(spool.clone())).unwrap();
+    assert!(reporter.cycle().await.is_err());
+    assert!(reporter.cycle().await.is_err());
+    assert!(spool.exists());
+    drop(reporter);
+
+    // a restarted daemon, with the server back
+    let mut reporter = Reporter::new(config.clone(), Some(spool.clone())).unwrap();
+    reporter.cycle().await.unwrap();
+    assert!(!spool.exists());
+    let samples = server
+        .get(&format!("/api/v1/hosts/{}/samples", config.host_id))
+        .await;
+    assert_eq!(samples.as_array().unwrap().len(), 3);
 }

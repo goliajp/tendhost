@@ -15,6 +15,8 @@ pub enum Error {
     Unauthenticated,
     #[error("not allowed")]
     Forbidden,
+    #[error("too many attempts; try again in {retry_after_secs} seconds")]
+    Throttled { retry_after_secs: u64 },
     #[error("internal error: {0}")]
     Internal(String),
 }
