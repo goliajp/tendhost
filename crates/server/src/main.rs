@@ -17,10 +17,15 @@ async fn main() -> Result<()> {
     std::fs::create_dir_all(&config.data_dir)
         .with_context(|| format!("creating the data directory {}", config.data_dir.display()))?;
     let store = Store::open(&config.data_dir)?;
-    let settings = tendhost_identity::Settings {
+    let settings = tendhost_server::Settings {
+        public_url: config.url(),
         secure_cookies: config.served_over_https(),
     };
-    let app = tendhost_server::assemble(&store, Arc::new(SystemClock), settings)?;
+    let app = Arc::new(tendhost_server::assemble(
+        &store,
+        Arc::new(SystemClock),
+        settings,
+    )?);
 
     let listener = tokio::net::TcpListener::bind(config.listen)
         .await
@@ -36,7 +41,7 @@ async fn main() -> Result<()> {
     }
 
     app.spawn_background();
-    axum::serve(listener, app.router)
+    axum::serve(listener, app.router.clone())
         .with_graceful_shutdown(shutdown())
         .await?;
     Ok(())

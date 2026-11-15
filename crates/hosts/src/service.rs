@@ -41,10 +41,11 @@ impl Hosts {
         self.bus.publish(
             principal.actor.clone(),
             &EnrollmentOpened {
-                enrollment_id: enrollment.id,
+                enrollment_id: enrollment.id.clone(),
             },
         );
         Ok(NewEnrollment {
+            id: enrollment.id,
             token,
             expires_at: enrollment.expires_at,
         })
@@ -80,6 +81,7 @@ impl Hosts {
             mode,
             labels: Vec::new(),
             enrolled_at: now,
+            enrollment_id: enrollment.id.clone(),
             facts,
             facts_at: now,
         };
@@ -118,6 +120,22 @@ impl Hosts {
         host.facts = facts;
         host.facts_at = at;
         self.repo.put_host(&host)
+    }
+
+    /// What the host lets the server do. For other parts of the server,
+    /// not for a caller of the api.
+    pub fn mode(&self, host_id: &str) -> Result<Mode> {
+        Ok(self
+            .repo
+            .host(host_id)?
+            .ok_or(Error::NotFound { kind: "host" })?
+            .mode)
+    }
+
+    /// What the host is called; `None` when there is no such host. For
+    /// other parts of the server.
+    pub fn name(&self, host_id: &str) -> Result<Option<String>> {
+        Ok(self.repo.host(host_id)?.map(|host| host.name))
     }
 
     pub fn hosts(&self, principal: &Principal) -> Result<Vec<Host>> {
@@ -282,6 +300,7 @@ mod tests {
             .enroll(&opened.token, "Web 01", Mode::Manage, facts("web01"))
             .unwrap();
         assert_eq!((host.name.as_str(), host.mode), ("web-01", Mode::Manage));
+        assert_eq!(host.enrollment_id, opened.id);
         assert_eq!(f.hosts.authenticate(&credential).unwrap(), host.id);
         assert!(matches!(
             f.hosts.authenticate("thh_guess"),

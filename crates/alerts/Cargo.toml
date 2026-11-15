@@ -1,0 +1,16 @@
+[package]
+name = "tendhost-alerts"
+description = "Conditions on hosts worth telling someone about, from when they begin to when they end"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+tendhost-kernel.workspace = true
+tendhost-store.workspace = true
+tendhost-http.workspace = true
+axum.workspace = true
+chrono.workspace = true
+serde.workspace = true
+tracing.workspace = true

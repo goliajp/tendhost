@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use tendhost_hostd::client::{Client, Synced};
 use tendhost_hostd::collect;
 use tendhost_hostd::config::Config;
-use tendhost_hostd::run::{Removed, Reporter};
+use tendhost_hostd::run::{Idle, Removed, Reporter};
 use tendhost_kernel::SystemClock;
 use tendhost_protocol::Mode;
 use tendhost_store::Store;
@@ -82,17 +82,32 @@ impl Server {
     }
 
     async fn enroll(&self, name: &str) -> Config {
+        self.enroll_as(name, Mode::Observe).await
+    }
+
+    async fn post(&self, path: &str, body: Value) -> (u16, Value) {
+        let request = self
+            .http
+            .post(format!("{}{path}", self.url))
+            .bearer_auth(&self.owner)
+            .json(&body);
+        let response = request.send().await.unwrap();
+        (response.status().as_u16(), response.json().await.unwrap())
+    }
+
+    async fn enroll_as(&self, name: &str, mode: Mode) -> Config {
         let token = self.enrollment_token().await;
         let client = Client::new(&self.url).unwrap();
         let enrolled = client
-            .enroll(&token, name, Mode::Observe, collect::facts().unwrap())
+            .enroll(&token, name, mode, collect::facts().unwrap())
             .await
             .unwrap();
         Config {
             server: self.url.clone(),
             host_id: enrolled.host_id,
             credential: enrolled.credential,
-            mode: Mode::Observe,
+            mode,
+            agents: true,
         }
     }
 }
@@ -101,7 +116,7 @@ impl Server {
 async fn an_enrolled_daemon_shows_up_with_this_machines_facts_and_measurements() {
     let server = Server::start().await;
     let config = server.enroll("End To End").await;
-    let mut reporter = Reporter::new(config.clone()).unwrap();
+    let mut reporter = Reporter::new(config.clone(), None, vec![]).unwrap();
     let wait = reporter.cycle().await.unwrap();
     assert_eq!(wait.as_secs(), 30);
     reporter.cycle().await.unwrap();
@@ -159,7 +174,11 @@ async fn a_daemon_whose_host_was_removed_is_told_so() {
         client.sync(&config.credential, vec![]).await.unwrap(),
         Synced::Rejected
     ));
-    let error = Reporter::new(config).unwrap().cycle().await.unwrap_err();
+    let error = Reporter::new(config, None, vec![])
+        .unwrap()
+        .cycle()
+        .await
+        .unwrap_err();
     assert!(error.is::<Removed>());
 }
 
@@ -170,8 +189,161 @@ async fn an_unreachable_server_is_an_error_and_not_a_removal() {
         host_id: "host_x".into(),
         credential: "thh_x".into(),
         mode: Mode::Observe,
+        agents: true,
     };
-    let error = Reporter::new(config).unwrap().cycle().await.unwrap_err();
+    let error = Reporter::new(config, None, vec![])
+        .unwrap()
+        .cycle()
+        .await
+        .unwrap_err();
     assert!(!error.is::<Removed>());
     assert!(format!("{error:#}").contains("reaching http://127.0.0.1:9"));
+}
+
+#[tokio::test]
+async fn a_job_runs_on_a_managing_host_and_its_output_comes_back() {
+    let server = Server::start().await;
+    let config = server.enroll_as("worker", Mode::Manage).await;
+    let job = json!({ "name": "hello", "host_id": config.host_id, "command": "echo hello from $(uname -s); exit 4",
+        "timeout_secs": 30, "schedule": { "kind": "manual" } });
+    let (status, job) = server.post("/api/v1/jobs", job).await;
+    assert_eq!(status, 201, "{job}");
+    let job_id = job["id"].as_str().unwrap();
+    let (status, _) = server
+        .post(&format!("/api/v1/jobs/{job_id}/runs"), json!({}))
+        .await;
+    assert_eq!(status, 201);
+
+    let mut reporter = Reporter::new(config, None, vec![]).unwrap();
+    reporter.cycle().await.unwrap();
+    assert!(matches!(
+        reporter.idle(std::time::Duration::from_secs(20)).await,
+        Idle::ResultReady
+    ));
+    reporter.catch_up().await.unwrap();
+
+    let runs = server.get(&format!("/api/v1/jobs/{job_id}/runs")).await;
+    assert_eq!(runs.as_array().unwrap().len(), 1);
+    assert_eq!(runs[0]["state"], "failed");
+    assert_eq!(runs[0]["exit_code"], 4);
+    assert!(
+        runs[0]["output"]
+            .as_str()
+            .unwrap()
+            .starts_with("hello from ")
+    );
+}
+
+#[tokio::test]
+async fn the_server_refuses_a_job_for_a_host_that_only_reports() {
+    let server = Server::start().await;
+    let config = server.enroll("watcher").await;
+    let job = json!({ "name": "x", "host_id": config.host_id, "command": "true", "schedule": { "kind": "manual" } });
+    let (status, reply) = server.post("/api/v1/jobs", job).await;
+    assert_eq!(status, 422);
+    assert!(
+        reply["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("--manage")
+    );
+}
+
+#[tokio::test]
+async fn reports_made_while_the_server_is_away_are_kept_on_disk_and_delivered_later() {
+    let server = Server::start().await;
+    let config = server.enroll("patient").await;
+    let dir = tempfile::tempdir().unwrap();
+    let spool = dir.path().join("outbox.json");
+
+    let away = Config {
+        server: "http://127.0.0.1:9".into(),
+        ..config.clone()
+    };
+    let mut reporter = Reporter::new(away, Some(spool.clone()), vec![]).unwrap();
+    assert!(reporter.cycle().await.is_err());
+    assert!(reporter.cycle().await.is_err());
+    assert!(spool.exists());
+    drop(reporter);
+
+    // a restarted daemon, with the server back
+    let mut reporter = Reporter::new(config.clone(), Some(spool.clone()), vec![]).unwrap();
+    reporter.cycle().await.unwrap();
+    assert!(!spool.exists());
+    let samples = server
+        .get(&format!("/api/v1/hosts/{}/samples", config.host_id))
+        .await;
+    assert_eq!(samples.as_array().unwrap().len(), 3);
+}
+
+#[tokio::test]
+async fn agents_are_listed_when_found_and_their_detail_arrives_once_tracked() {
+    let server = Server::start().await;
+    let config = server.enroll("dev").await;
+    let home = tempfile::tempdir().unwrap();
+    let sessions = home.path().join(".codex/sessions/2026");
+    std::fs::create_dir_all(&sessions).unwrap();
+    let now = chrono::Utc::now().to_rfc3339();
+    let rollout = [
+        format!(r#"{{"timestamp":"{now}","type":"turn_context","payload":{{"model":"gpt-x"}}}}"#),
+        format!(
+            r#"{{"timestamp":"{now}","type":"token_usage_record","payload":{{"response_id":"resp_1","usage":{{"input_tokens":100,"cached_input_tokens":40,"output_tokens":9}}}}}}"#
+        ),
+        format!(
+            r#"{{"timestamp":"{now}","type":"event_msg","payload":{{"type":"token_count","rate_limits":{{"primary":{{"used_percent":80.0,"window_minutes":300,"resets_at":null}},"plan_type":"pro"}}}}}}"#
+        ),
+    ];
+    std::fs::write(sessions.join("rollout-1.jsonl"), rollout.join("\n")).unwrap();
+
+    let mut reporter =
+        Reporter::new(config.clone(), None, vec![home.path().to_path_buf()]).unwrap();
+    reporter.cycle().await.unwrap();
+    let agents = server.get("/api/v1/agents").await;
+    assert_eq!(agents.as_array().unwrap().len(), 1);
+    assert_eq!(
+        (agents[0]["agent"].as_str(), agents[0]["tracked"].as_bool()),
+        (Some("codex"), Some(false))
+    );
+    assert_eq!(agents[0]["accounts"], json!([]));
+    assert!(agents[0]["limits"].is_null());
+
+    let request = server.http.put(format!(
+        "{}/api/v1/hosts/{}/agents",
+        server.url, config.host_id
+    ));
+    let reply = request
+        .bearer_auth(&server.owner)
+        .json(&json!({ "tracked": ["codex"] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(reply.status(), 200);
+    // the next sync carries the new tracking down, and the daemon answers at once
+    reporter.cycle().await.unwrap();
+    assert!(matches!(
+        reporter.idle(std::time::Duration::from_secs(5)).await,
+        Idle::ResultReady
+    ));
+    reporter.catch_up().await.unwrap();
+
+    let agents = server.get("/api/v1/agents").await;
+    assert_eq!(agents[0]["tracked"], true);
+    assert_eq!(agents[0]["accounts"][0]["label"], "codex");
+    assert_eq!(agents[0]["limits"]["plan"], "pro");
+    assert_eq!(agents[0]["limits"]["windows"][0]["name"], "5h");
+    let usage = server
+        .get(&format!(
+            "/api/v1/hosts/{}/agents/codex/usage",
+            config.host_id
+        ))
+        .await;
+    assert_eq!(usage.as_array().unwrap().len(), 1);
+    assert_eq!(
+        (
+            usage[0]["model"].as_str(),
+            usage[0]["input_tokens"].as_u64(),
+            usage[0]["cache_read_tokens"].as_u64()
+        ),
+        (Some("gpt-x"), Some(60), Some(40))
+    );
 }

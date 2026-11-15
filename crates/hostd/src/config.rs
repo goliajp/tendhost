@@ -15,6 +15,13 @@ pub struct Config {
     /// What this host lets the server do. Changed only by editing this
     /// file on the host.
     pub mode: Mode,
+    /// Whether this host tells the server about the coding agents on it.
+    #[serde(default = "yes")]
+    pub agents: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 impl Config {
@@ -75,6 +82,7 @@ mod tests {
             host_id: "host_1".into(),
             credential: "thh_secret".into(),
             mode: Mode::Observe,
+            agents: true,
         }
     }
 
@@ -99,6 +107,14 @@ mod tests {
             std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
             0o600
         );
+    }
+
+    #[test]
+    fn a_configuration_written_before_the_agents_switch_existed_reports_agents() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hostd.toml");
+        std::fs::write(&path, "server = \"http://x\"\nhost_id = \"host_1\"\ncredential = \"thh_x\"\nmode = \"manage\"\n").unwrap();
+        assert!(Config::load(&path).unwrap().agents);
     }
 
     #[test]
