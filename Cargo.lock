@@ -2145,6 +2145,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tendhost-agents"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "serde",
+ "tendhost-http",
+ "tendhost-kernel",
+ "tendhost-store",
+ "tracing",
+]
+
+[[package]]
 name = "tendhost-audit"
 version = "0.1.0"
 dependencies = [
@@ -2163,6 +2176,7 @@ name = "tendhost-gateway"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "tendhost-agents",
  "tendhost-hosts",
  "tendhost-http",
  "tendhost-jobs",
@@ -2277,6 +2291,7 @@ dependencies = [
  "axum",
  "chrono",
  "serde_json",
+ "tendhost-agents",
  "tendhost-audit",
  "tendhost-gateway",
  "tendhost-hosts",

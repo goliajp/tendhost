@@ -1,12 +1,13 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use tendhost_hostd::client::Client;
 use tendhost_hostd::config::{Config, default_path};
 use tendhost_hostd::run::Removed;
-use tendhost_hostd::{collect, run};
+use tendhost_hostd::service::Manager;
+use tendhost_hostd::{agents, collect, run};
 use tendhost_protocol::Mode;
 
 /// The tendhost daemon for a managed host.
@@ -38,9 +39,18 @@ enum Command {
         /// host only reports
         #[arg(long)]
         manage: bool,
+        /// Tell the server nothing about the coding agents (Claude Code,
+        /// Codex, Gemini CLI, Kimi Code) on this host
+        #[arg(long)]
+        no_agents: bool,
     },
     /// Report to the server until stopped
     Run,
+    /// Run the daemon as a service from now on (systemd or launchd), using
+    /// this executable where it is
+    Install,
+    /// Stop and remove the service; the host stays enrolled
+    Uninstall,
 }
 
 /// sysexits.h EX_CONFIG: a service manager should not restart on it
@@ -77,6 +87,7 @@ async fn execute(cli: Cli) -> Result<()> {
             token,
             name,
             manage,
+            no_agents,
         } => {
             let mode = if manage { Mode::Manage } else { Mode::Observe };
             let name = match name {
@@ -91,6 +102,7 @@ async fn execute(cli: Cli) -> Result<()> {
                 host_id: enrolled.host_id,
                 credential: enrolled.credential,
                 mode,
+                agents: !no_agents,
             };
             config.save(&path)?;
             println!(
@@ -103,18 +115,50 @@ async fn execute(cli: Cli) -> Result<()> {
             Ok(())
         }
         Command::Run => {
+            let homes = agents::homes(is_root(), std::env::var("HOME").ok().as_deref());
             run::run(
                 Config::load(&path)?,
                 Some(path.with_file_name("outbox.json")),
+                homes,
             )
             .await
+        }
+        Command::Install => {
+            // fail here, with the enroll hint, rather than in a service log
+            Config::load(&path)?;
+            let exe = std::env::current_exe().context("finding this executable")?;
+            let manager = manager()?;
+            manager.install(&exe, &path)?;
+            println!(
+                "tendhostd now runs as a service ({}).",
+                manager.definition_path().display()
+            );
+            Ok(())
+        }
+        Command::Uninstall => {
+            manager()?.uninstall()?;
+            println!(
+                "The service is removed. This host is still enrolled; its configuration is {}.",
+                path.display()
+            );
+            Ok(())
         }
     }
 }
 
-/// Whether the daemon runs as root, which decides where its
-/// configuration lives.
+fn uid() -> u32 {
+    // SAFETY: geteuid has no preconditions and cannot fail
+    unsafe { libc::geteuid() }
+}
+
 fn is_root() -> bool {
-    std::env::var("USER").is_ok_and(|user| user == "root")
-        || std::env::var("HOME").is_ok_and(|home| home == "/root" || home == "/var/root")
+    uid() == 0
+}
+
+fn manager() -> Result<Manager> {
+    Manager::detect(
+        std::env::consts::OS,
+        uid(),
+        std::env::var("HOME").ok().as_deref(),
+    )
 }

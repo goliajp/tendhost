@@ -11,6 +11,7 @@ use std::time::Duration;
 use axum::Router;
 use axum::middleware::from_fn_with_state;
 use axum::routing::get;
+use tendhost_agents::Agents;
 use tendhost_audit::Audit;
 use tendhost_hosts::Hosts;
 use tendhost_http::Authenticator;
@@ -89,6 +90,14 @@ pub fn assemble(
     ));
     bus.attach(jobs.clone());
 
+    let agents = Arc::new(Agents::new(
+        store.keyspace("agents"),
+        bus.clone(),
+        clock.clone(),
+        Arc::new(ports::HostsKnown(hosts.clone())),
+    ));
+    bus.attach(agents.clone());
+
     let authenticator: Arc<dyn Authenticator> = identity.clone();
     let api = Router::new()
         .merge(tendhost_identity::router(identity))
@@ -96,6 +105,7 @@ pub fn assemble(
         .merge(tendhost_hosts::router(hosts.clone()))
         .merge(tendhost_telemetry::router(telemetry.clone(), clock))
         .merge(tendhost_jobs::router(jobs.clone()))
+        .merge(tendhost_agents::router(agents.clone()))
         .layer(from_fn_with_state(
             authenticator,
             tendhost_http::authenticate,
@@ -108,6 +118,7 @@ pub fn assemble(
             hosts,
             telemetry.clone(),
             jobs.clone(),
+            agents,
         ));
     Ok(App {
         router,

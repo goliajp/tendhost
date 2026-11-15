@@ -12,6 +12,7 @@ use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::post;
 use axum::{Json, Router};
+use tendhost_agents::Agents;
 use tendhost_hosts::Hosts;
 use tendhost_http::{ApiResult, Credential, credential};
 use tendhost_jobs::Jobs;
@@ -27,10 +28,16 @@ struct Ctx {
     hosts: Arc<Hosts>,
     telemetry: Arc<Telemetry>,
     jobs: Arc<Jobs>,
+    agents: Arc<Agents>,
 }
 
 /// Routes at the paths the protocol names, relative to the server root.
-pub fn router(hosts: Arc<Hosts>, telemetry: Arc<Telemetry>, jobs: Arc<Jobs>) -> Router {
+pub fn router(
+    hosts: Arc<Hosts>,
+    telemetry: Arc<Telemetry>,
+    jobs: Arc<Jobs>,
+    agents: Arc<Agents>,
+) -> Router {
     Router::new()
         .route(wire::ENROLL_PATH, post(enroll))
         .route(wire::SYNC_PATH, post(sync))
@@ -38,6 +45,7 @@ pub fn router(hosts: Arc<Hosts>, telemetry: Arc<Telemetry>, jobs: Arc<Jobs>) -> 
             hosts,
             telemetry,
             jobs,
+            agents,
         })
 }
 
@@ -76,7 +84,7 @@ async fn sync(
     for report in request.reports {
         deliver(&ctx, &host_id, report)?;
     }
-    let directives = ctx
+    let mut directives: Vec<wire::Directive> = ctx
         .jobs
         .collect(&host_id)?
         .into_iter()
@@ -86,6 +94,9 @@ async fn sync(
             timeout_secs: a.timeout_secs,
         })
         .collect();
+    directives.push(wire::Directive::TrackAgents {
+        agents: ctx.agents.tracked(&host_id)?,
+    });
     Ok(Json(wire::SyncResponse {
         directives,
         next_sync_secs: SYNC_EVERY_SECS,
@@ -126,6 +137,11 @@ fn deliver(ctx: &Ctx, host_id: &str, report: wire::Report) -> Result<()> {
                 finished_at: result.finished_at,
             },
         ),
+        wire::ReportBody::Agents(found) => ctx.agents.record(
+            host_id,
+            report.at,
+            found.agents.into_iter().map(agent).collect(),
+        ),
         // from a newer daemon; nothing here owns it yet
         wire::ReportBody::Unknown => Ok(()),
     }
@@ -154,5 +170,50 @@ fn facts(facts: wire::Facts) -> tendhost_hosts::Facts {
         cpu_count: facts.cpu_count,
         memory_bytes: facts.memory_bytes,
         daemon_version: facts.daemon_version,
+    }
+}
+
+fn agent(report: wire::AgentReport) -> tendhost_agents::Found {
+    tendhost_agents::Found {
+        agent: report.agent,
+        account_count: report.account_count,
+        supports_usage: report.supports_usage,
+        supports_limits: report.supports_limits,
+        detail: report.detail.map(|detail| tendhost_agents::FoundDetail {
+            accounts: detail
+                .accounts
+                .into_iter()
+                .map(|a| tendhost_agents::Account {
+                    dir: a.dir,
+                    label: a.label,
+                    plan: a.plan,
+                })
+                .collect(),
+            usage: detail
+                .usage
+                .into_iter()
+                .map(|u| tendhost_agents::UsageDay {
+                    day: u.day,
+                    model: u.model,
+                    input_tokens: u.input_tokens,
+                    output_tokens: u.output_tokens,
+                    cache_read_tokens: u.cache_read_tokens,
+                    cache_write_tokens: u.cache_write_tokens,
+                })
+                .collect(),
+            limits: detail.limits.map(|l| tendhost_agents::LimitReading {
+                observed_at: l.observed_at,
+                plan: l.plan,
+                windows: l
+                    .windows
+                    .into_iter()
+                    .map(|w| tendhost_agents::LimitWindow {
+                        name: w.name,
+                        used_ratio: w.used_ratio,
+                        resets_at: w.resets_at,
+                    })
+                    .collect(),
+            }),
+        }),
     }
 }

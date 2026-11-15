@@ -1,21 +1,23 @@
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Result, bail};
 use chrono::Utc;
-use tendhost_protocol::{Directive, Facts, Mode, Report, ReportBody, RunResult};
+use tendhost_protocol::{AgentsReport, Directive, Facts, Mode, Report, ReportBody, RunResult};
 use tokio::sync::{Notify, mpsc};
 
 use crate::client::{Client, Synced};
 use crate::config::Config;
 use crate::outbox::Outbox;
-use crate::{collect, exec};
+use crate::{agents, collect, exec};
 
 /// A day of reports at the default interval.
 const OUTBOX_CAPACITY: usize = 2880;
 const BATCH: usize = 500;
 const FIRST_INTERVAL: Duration = Duration::from_secs(30);
+/// How often the agents on the host are looked at again.
+const AGENTS_EVERY: Duration = Duration::from_secs(300);
 
 /// One host's reporting state between syncs.
 pub struct Reporter {
@@ -31,11 +33,16 @@ pub struct Reporter {
     /// signalled when a command finishes, so its result does not wait for
     /// the next scheduled sync
     wake: Arc<Notify>,
+    /// the homes searched for coding agents
+    homes: Vec<PathBuf>,
+    /// the agents the server asked the detail of
+    tracked: Vec<String>,
+    agents_due: Instant,
 }
 
 impl Reporter {
     /// `spool`: a file to keep undelivered reports in.
-    pub fn new(config: Config, spool: Option<PathBuf>) -> Result<Self> {
+    pub fn new(config: Config, spool: Option<PathBuf>, homes: Vec<PathBuf>) -> Result<Self> {
         let outbox = match &spool {
             Some(path) => Outbox::restore(path, OUTBOX_CAPACITY)?,
             None => Outbox::new(OUTBOX_CAPACITY),
@@ -50,6 +57,9 @@ impl Reporter {
             finished_tx,
             finished_rx,
             wake: Arc::new(Notify::new()),
+            homes,
+            tracked: Vec::new(),
+            agents_due: Instant::now(),
         })
     }
 
@@ -70,6 +80,7 @@ impl Reporter {
             at: now,
             body: ReportBody::Metrics(collect::metrics()?),
         });
+        self.look_at_agents().await;
         let sent = self.flush().await;
         self.persist()?;
         let next = sent?;
@@ -79,12 +90,32 @@ impl Reporter {
         Ok(next)
     }
 
-    /// Sends the results of commands that finished since the last sync,
-    /// without measuring.
-    pub async fn deliver_results(&mut self) -> Result<()> {
+    /// Sends what came up since the last sync (results of commands, the
+    /// agents after the server changed which it tracks) without measuring.
+    pub async fn catch_up(&mut self) -> Result<()> {
+        self.look_at_agents().await;
         let sent = self.flush().await;
         self.persist()?;
         sent.map(|_| ())
+    }
+
+    /// Queues a report of the host's coding agents when one is due.
+    async fn look_at_agents(&mut self) {
+        if !self.config.agents || Instant::now() < self.agents_due {
+            return;
+        }
+        self.agents_due = Instant::now() + AGENTS_EVERY;
+        let (homes, tracked) = (self.homes.clone(), self.tracked.clone());
+        let now = Utc::now();
+        // reading session logs can take seconds on a busy machine
+        let found =
+            tokio::task::spawn_blocking(move || agents::collect(&homes, &tracked, now)).await;
+        if let Ok(agents) = found {
+            self.outbox.push(Report {
+                at: now,
+                body: ReportBody::Agents(AgentsReport { agents }),
+            });
+        }
     }
 
     /// Waits for `wait` to pass or for a command to finish, whichever
@@ -114,17 +145,16 @@ impl Reporter {
                 Synced::Accepted(response) => {
                     self.outbox.sent(count);
                     next = Duration::from_secs(u64::from(response.next_sync_secs).clamp(5, 3600));
-                    response
-                        .directives
-                        .into_iter()
-                        .for_each(|directive| self.obey(directive));
+                    for directive in response.directives {
+                        self.obey(directive);
+                    }
                 }
                 Synced::Rejected => bail!(Removed),
             }
         }
     }
 
-    fn obey(&self, directive: Directive) {
+    fn obey(&mut self, directive: Directive) {
         match directive {
             Directive::RunJob {
                 run_id,
@@ -149,6 +179,13 @@ impl Reporter {
                     wake.notify_one();
                 });
             }
+            Directive::TrackAgents { agents } => {
+                if agents != self.tracked {
+                    self.tracked = agents;
+                    self.agents_due = Instant::now();
+                    self.wake.notify_one();
+                }
+            }
             // from a newer server
             Directive::Unknown => {}
         }
@@ -164,6 +201,7 @@ impl Reporter {
 
 pub enum Idle {
     TimeToMeasure,
+    /// a command finished, or the server changed which agents it tracks
     ResultReady,
 }
 
@@ -195,16 +233,16 @@ impl std::error::Error for Removed {}
 
 /// Reports until the host is removed on the server. Any other failure is
 /// logged and the next cycle tries again.
-pub async fn run(config: Config, spool: Option<PathBuf>) -> Result<()> {
+pub async fn run(config: Config, spool: Option<PathBuf>, homes: Vec<PathBuf>) -> Result<()> {
     tracing::info!(server = %config.server, host = %config.host_id, mode = ?config.mode, "tendhostd is reporting");
-    let mut reporter = Reporter::new(config, spool)?;
+    let mut reporter = Reporter::new(config, spool, homes)?;
     let mut wait = FIRST_INTERVAL;
     let mut measure = true;
     loop {
         let outcome = if measure {
             reporter.cycle().await.map(Some)
         } else {
-            reporter.deliver_results().await.map(|_| None)
+            reporter.catch_up().await.map(|_| None)
         };
         match outcome {
             Ok(Some(next)) => wait = next,
