@@ -6,6 +6,10 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+# embed the built dashboard (web/dist must exist: `bun run build` in web/)
+web = ["dep:rust-embed"]
+
 [dependencies]
 tendhost-kernel.workspace = true
 tendhost-store.workspace = true
@@ -16,11 +20,14 @@ tendhost-hosts.workspace = true
 tendhost-telemetry.workspace = true
 tendhost-jobs.workspace = true
 tendhost-agents.workspace = true
+tendhost-notify.workspace = true
+tendhost-alerts.workspace = true
 tendhost-gateway.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+rust-embed = { workspace = true, optional = true }
 tracing-subscriber.workspace = true
 
 [dev-dependencies]

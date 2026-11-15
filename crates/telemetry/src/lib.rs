@@ -9,7 +9,7 @@ mod http;
 mod model;
 mod service;
 
-pub use events::{HostOffline, HostOnline};
+pub use events::{DiskUse, HostOffline, HostOnline, SampleRecorded};
 pub use http::router;
 pub use model::{Disk, Presence, Sample};
 pub use service::Telemetry;

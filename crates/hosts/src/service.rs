@@ -130,6 +130,12 @@ impl Hosts {
             .mode)
     }
 
+    /// What the host is called; `None` when there is no such host. For
+    /// other parts of the server.
+    pub fn name(&self, host_id: &str) -> Result<Option<String>> {
+        Ok(self.repo.host(host_id)?.map(|host| host.name))
+    }
+
     pub fn hosts(&self, principal: &Principal) -> Result<Vec<Host>> {
         principal.require(Role::Viewer)?;
         self.repo.hosts()

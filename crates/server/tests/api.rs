@@ -274,3 +274,36 @@ async fn health_needs_no_credential() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+async fn the_install_script_is_public_and_an_unknown_endpoint_is_a_json_error() {
+    let store = Store::temp().unwrap();
+    let settings = tendhost_server::Settings {
+        public_url: "https://tend.example.com".into(),
+        secure_cookies: true,
+    };
+    let router = tendhost_server::assemble(&store, Arc::new(SystemClock), settings)
+        .unwrap()
+        .router;
+
+    let response = router
+        .clone()
+        .oneshot(Request::get("/install.sh").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let script = String::from_utf8(
+        to_bytes(response.into_body(), 1 << 20)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    assert!(script.contains("SERVER=\"https://tend.example.com\""));
+
+    let missing = call(&router, "GET", "/api/v1/nothing", None, None).await;
+    assert_eq!(missing.status, StatusCode::NOT_FOUND);
+    assert_eq!(missing.body["error"]["code"], "not_found");
+    let missing = call(&router, "POST", "/hostd/v9/sync", None, None).await;
+    assert_eq!(missing.body["error"]["code"], "not_found");
+}
