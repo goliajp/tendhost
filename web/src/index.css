@@ -17,6 +17,11 @@
   --live-soft: #d9ebe3;
   --down: #a8492a;
   --down-soft: #f3e1d8;
+  --series-1: #1f5f8b;
+  --series-2: #b8741a;
+  --series-3: #6b4a9e;
+  --series-4: #2f7f6f;
+  --series-5: #8a8f8c;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -30,6 +35,11 @@
     --live-soft: #173229;
     --down: #e48d68;
     --down-soft: #3a231a;
+    --series-1: #6fb1dc;
+    --series-2: #e3a857;
+    --series-3: #b39ae0;
+    --series-4: #6fc4b2;
+    --series-5: #7d8885;
   }
 }
 

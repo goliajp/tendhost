@@ -68,7 +68,7 @@ export function AuditPage() {
                       {dateTime(parseTime(entry.at))}
                     </time>
                     <span className="col-start-2 min-w-0 sm:col-start-auto">
-                      <span className="font-medium">{who(entry.actor, principal.id)}</span>
+                      <span className="font-medium">{who(entry.actor, entry.actor_name, principal.id)}</span>
                       <span className="text-muted">: </span>
                       {describe(entry)}
                     </span>

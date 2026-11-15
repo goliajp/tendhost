@@ -15,7 +15,9 @@ use tendhost_protocol::{AgentAccount, AgentDetail, AgentReport, LimitReading, Us
 
 /// Usage is recounted for this many days back on every pass, today
 /// included, so a day keeps being corrected until it is over.
-const RECOUNT_DAYS: i64 = 2;
+pub const RECOUNT_DAYS: i64 = 2;
+/// How far back usage is read when the server starts tracking an agent.
+pub const BACKFILL_DAYS: i64 = 30;
 
 /// Reads something from an agent's account directories, from a moment on.
 type Reader<T> = fn(&[PathBuf], DateTime<Utc>) -> T;
@@ -86,9 +88,14 @@ pub fn homes(is_root: bool, own_home: Option<&str>) -> Vec<PathBuf> {
 }
 
 /// One report per agent found under `homes`. Detail is read only for the
-/// agents in `tracked`.
-pub fn collect(homes: &[PathBuf], tracked: &[String], now: DateTime<Utc>) -> Vec<AgentReport> {
-    let since = (now.date_naive() - Duration::days(RECOUNT_DAYS - 1))
+/// agents in `tracked`, with usage for the last `days` days, today included.
+pub fn collect(
+    homes: &[PathBuf],
+    tracked: &[String],
+    now: DateTime<Utc>,
+    days: i64,
+) -> Vec<AgentReport> {
+    let since = (now.date_naive() - Duration::days(days - 1))
         .and_hms_opt(0, 0, 0)
         .expect("midnight")
         .and_utc();
@@ -192,7 +199,7 @@ mod tests {
         std::fs::create_dir_all(home.path().join(".kimi-code-profile-2")).unwrap();
         let homes = [home.path().to_path_buf()];
 
-        let untracked = collect(&homes, &[], now);
+        let untracked = collect(&homes, &[], now, RECOUNT_DAYS);
         let names: Vec<_> = untracked
             .iter()
             .map(|r| (r.agent.as_str(), r.account_count))
@@ -202,7 +209,7 @@ mod tests {
         assert!(untracked[0].supports_usage && !untracked[0].supports_limits);
         assert!(!untracked[1].supports_usage);
 
-        let tracked = collect(&homes, &["claude".into(), "kimi".into()], now);
+        let tracked = collect(&homes, &["claude".into(), "kimi".into()], now, RECOUNT_DAYS);
         let claude = tracked[0].detail.as_ref().unwrap();
         assert_eq!(
             (
@@ -223,9 +230,35 @@ mod tests {
     }
 
     #[test]
+    fn how_far_back_usage_is_read_follows_the_days_asked() {
+        let home = tempfile::tempdir().unwrap();
+        let now = Utc.with_ymd_and_hms(2026, 3, 10, 12, 0, 0).unwrap();
+        let line = |day: u32, id: &str| {
+            format!(
+                r#"{{"type":"assistant","timestamp":"2026-03-{day:02}T08:00:00Z","requestId":"{id}","message":{{"id":"{id}","model":"opus","usage":{{"input_tokens":1,"output_tokens":1}}}}}}"#
+            )
+        };
+        let log = [line(1, "a"), line(9, "b"), line(10, "c")].join("\n");
+        write(&home.path().join(".claude/projects/p/s.jsonl"), &log);
+        let days = |days| {
+            let reports = collect(&[home.path().to_path_buf()], &["claude".into()], now, days);
+            reports[0].detail.as_ref().unwrap().usage.len()
+        };
+        assert_eq!((days(RECOUNT_DAYS), days(BACKFILL_DAYS)), (2, 3));
+    }
+
+    #[test]
     fn a_host_without_agents_reports_none() {
         let home = tempfile::tempdir().unwrap();
-        assert!(collect(&[home.path().to_path_buf()], &["claude".into()], Utc::now()).is_empty());
+        assert!(
+            collect(
+                &[home.path().to_path_buf()],
+                &["claude".into()],
+                Utc::now(),
+                RECOUNT_DAYS
+            )
+            .is_empty()
+        );
     }
 
     #[test]

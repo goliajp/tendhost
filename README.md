@@ -166,7 +166,9 @@ server.
 
 When several accounts of one agent share a session store, usage is counted
 per agent on the host, and a limit reading belongs to whichever account ran
-the latest session. Usage is kept 90 days.
+the latest session. When tracking starts, the last 30 days of usage are
+read; after that, today and yesterday are recounted every five minutes.
+Usage is kept 90 days.
 
 ## Alerts
 

@@ -3,12 +3,16 @@
 
 import type { ModuleDef, NavEntry, RouteDef } from '@/kit/module'
 import { atLeast, type Role } from '@/kit/session'
+import { agents } from '@/modules/agents'
+import { alerts } from '@/modules/alerts'
 import { audit } from '@/modules/audit'
 import { hosts } from '@/modules/hosts'
 import { identity } from '@/modules/identity'
+import { jobs } from '@/modules/jobs'
+import { notify } from '@/modules/notify'
 import { telemetry } from '@/modules/telemetry'
 
-export const modules: ModuleDef[] = [hosts, telemetry, identity, audit]
+export const modules: ModuleDef[] = [hosts, telemetry, jobs, agents, alerts, notify, identity, audit]
 
 /** Where `/` leads. */
 export const HOME = '/hosts'

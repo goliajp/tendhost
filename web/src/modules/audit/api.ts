@@ -9,6 +9,8 @@ export interface Entry {
   topic: string
   at: string
   actor: Actor
+  /** the user's or host's current name; null once it is gone */
+  actor_name: string | null
   payload: Record<string, unknown>
 }
 

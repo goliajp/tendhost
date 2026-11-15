@@ -8,24 +8,10 @@ export interface Point {
   v: number
 }
 
-/** At most `max` points over `[from, to]`: the window is cut into equal
- *  spans and each span that holds samples becomes their mean. A span with
- *  no sample yields no point, so silence stays visible as a gap. */
-export function downsample(points: readonly Point[], from: number, to: number, max: number): Point[] {
-  if (points.length <= max) return [...points]
-  const span = (to - from) / max
-  const sums = new Map<number, { t: number; v: number; n: number }>()
-  for (const point of points) {
-    const index = Math.min(max - 1, Math.max(0, Math.floor((point.t - from) / span)))
-    const sum = sums.get(index) ?? { t: 0, v: 0, n: 0 }
-    sum.t += point.t
-    sum.v += point.v
-    sum.n += 1
-    sums.set(index, sum)
-  }
-  return [...sums.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([, sum]) => ({ t: sum.t / sum.n, v: sum.v / sum.n }))
+/** How many points to ask the server for: one per three pixels of chart,
+ *  within what is worth drawing and worth sending. */
+export function pointsFor(chartWidth: number): number {
+  return Math.min(400, Math.max(60, Math.round(chartWidth / 3)))
 }
 
 /** The median distance in time between neighbouring points; 0 for fewer

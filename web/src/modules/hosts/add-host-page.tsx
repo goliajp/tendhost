@@ -1,17 +1,26 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { countdown, parseTime } from '@/kit/format'
-import { Button, Copyable, LinkButton, Notice, PageHeader, Problem } from '@/kit/ui'
+import { Button, Copyable, LinkButton, Notice, PageHeader, Problem, WizardStep as Step } from '@/kit/ui'
 import { useAction } from '@/kit/use-action'
 import { useNow } from '@/kit/use-resource'
 import { hostsApi, type Host, type Mode, type NewEnrollment } from './api'
-import { MODE_MEANING, MODE_NAME, RUN_COMMAND, enrollCommand, joinedSince, sendsCredentialInClear } from './rules'
+import {
+  MODE_MEANING,
+  MODE_NAME,
+  RUN_COMMAND,
+  SERVICE_COMMAND,
+  admittedBy,
+  enrollCommand,
+  installCommand,
+  sendsCredentialInClear,
+} from './rules'
 
 const POLL_MS = 3000
 
 type Stage =
   | { at: 'choose' }
-  | { at: 'commands'; enrollment: NewEnrollment; known: string[] }
+  | { at: 'commands'; enrollment: NewEnrollment }
   | { at: 'joined'; host: Host }
 
 export function AddHostPage() {
@@ -21,16 +30,14 @@ export function AddHostPage() {
   const onJoined = useCallback((host: Host) => setStage({ at: 'joined', host }), [])
 
   const open = useAction(async () => {
-    // what is already there, so the newcomer can be told apart
-    const known = (await hostsApi.list()).map((host) => host.id)
-    setStage({ at: 'commands', enrollment: await hostsApi.openEnrollment(), known })
+    setStage({ at: 'commands', enrollment: await hostsApi.openEnrollment() })
   })
 
   return (
     <>
       <PageHeader
         title="Add a host"
-        lead="Three steps: decide what this server may do on the machine, run two commands there, and watch it arrive"
+        lead="Three steps: decide what this server may do on the machine, run one command there, and watch it arrive"
       />
       <ol className="m-0 max-w-[46rem] list-none space-y-10 p-0">
         <Step n={1} title="Decide what this server may do on the machine" active={stage.at === 'choose'}>
@@ -77,12 +84,11 @@ export function AddHostPage() {
           )}
         </Step>
 
-        <Step n={2} title="Run two commands on the machine" active={stage.at === 'commands'}>
+        <Step n={2} title="Run one command on the machine" active={stage.at === 'commands'}>
           {stage.at === 'commands' ? (
             <Commands
               mode={mode}
               enrollment={stage.enrollment}
-              known={stage.known}
               onJoined={onJoined}
               onRestart={() => setStage({ at: 'choose' })}
             />
@@ -97,8 +103,8 @@ export function AddHostPage() {
               <Notice tone="live">
                 <p className="font-medium">{stage.host.name} joined</p>
                 <p className="mt-1">
-                  {stage.host.facts.os} {stage.host.facts.os_version}, {stage.host.facts.arch}. It reports as long
-                  as <code className="font-mono text-[0.87rem]">{RUN_COMMAND}</code> keeps running there.
+                  {stage.host.facts.os} {stage.host.facts.os_version}, {stage.host.facts.arch}. It reports for
+                  as long as the daemon runs there.
                 </p>
               </Notice>
               <div className="mt-4 flex flex-wrap gap-2">
@@ -120,34 +126,14 @@ export function AddHostPage() {
   )
 }
 
-function Step({ n, title, active, children }: { n: number; title: string; active: boolean; children: ReactNode }) {
-  return (
-    <li className="grid grid-cols-[2rem_1fr] gap-x-3" aria-current={active ? 'step' : undefined}>
-      <span
-        className={`tabular flex h-7 w-7 items-center justify-center rounded-full border text-[0.87rem] font-medium ${
-          active ? 'border-live bg-live text-surface' : 'border-rule text-muted'
-        }`}
-      >
-        {n}
-      </span>
-      <div className="min-w-0">
-        <h2 className={`mb-3 text-[1.1rem] font-semibold ${active ? '' : 'text-muted'}`}>{title}</h2>
-        {children}
-      </div>
-    </li>
-  )
-}
-
 function Commands({
   mode,
   enrollment,
-  known,
   onJoined,
   onRestart,
 }: {
   mode: Mode
   enrollment: NewEnrollment
-  known: string[]
   onJoined: (host: Host) => void
   onRestart: () => void
 }) {
@@ -161,7 +147,7 @@ function Commands({
     let stopped = false
     const look = async () => {
       try {
-        const [joined] = joinedSince(known, await hostsApi.list())
+        const joined = admittedBy(enrollment.id, await hostsApi.list())
         if (stopped) return
         setPollError(undefined)
         if (joined) onJoined(joined)
@@ -174,7 +160,7 @@ function Commands({
       stopped = true
       clearInterval(timer)
     }
-  }, [expired, known, onJoined])
+  }, [expired, enrollment.id, onJoined])
 
   if (expired) {
     return (
@@ -201,25 +187,36 @@ function Commands({
         </Notice>
       ) : null}
       <div>
-        <p className="mb-2">
-          First, join the server. Run this on the machine, as the user the daemon should run as:
-        </p>
-        <Copyable value={enrollCommand(origin, enrollment.token, mode)} label="Command that joins the server" />
-        <p className="mt-2 text-[0.93rem] text-muted">
-          The token in it admits one machine and stops working in{' '}
-          <span className="tabular font-medium text-ink">{expires ? countdown(expires, now) : '—'}</span>. Add{' '}
-          <code className="font-mono text-[0.87rem]">--name</code> to choose the name it appears under; the default
-          is its hostname.
+        <p className="mb-2">Run this on the machine, as root or as the user the daemon should run as:</p>
+        <Copyable value={installCommand(origin, enrollment.token, mode)} label="Command that installs and joins" />
+        <p className="mt-2 max-w-[65ch] text-[0.93rem] text-muted">
+          It downloads <code className="font-mono text-[0.87rem]">tendhostd</code> for the machine, joins this
+          server and keeps the daemon running as a systemd or launchd service. The token in it admits one machine
+          and stops working in{' '}
+          <span className="tabular font-medium text-ink">{expires ? countdown(expires, now) : '—'}</span>.
         </p>
       </div>
-      <div>
-        <p className="mb-2">Then start reporting:</p>
-        <Copyable value={RUN_COMMAND} label="Command that starts reporting" />
-        <p className="mt-2 text-[0.93rem] text-muted">
-          <code className="font-mono text-[0.87rem]">tendhostd</code> is built from the tendhost source with{' '}
-          <code className="font-mono text-[0.87rem]">cargo build --release -p tendhost-hostd</code>.
-        </p>
-      </div>
+      <details className="rounded-[5px] border border-rule px-4 py-3">
+        <summary className="cursor-pointer font-medium">The machine already has tendhostd</summary>
+        <div className="mt-3 space-y-4">
+          <div>
+            <p className="mb-2">Join the server:</p>
+            <Copyable value={enrollCommand(origin, enrollment.token, mode)} label="Command that joins the server" />
+            <p className="mt-2 text-[0.93rem] text-muted">
+              Add <code className="font-mono text-[0.87rem]">--name</code> to choose the name it appears under; the
+              default is its hostname.
+            </p>
+          </div>
+          <div>
+            <p className="mb-2">Then keep it reporting, as a service that survives restarts:</p>
+            <Copyable value={SERVICE_COMMAND} label="Command that installs the service" />
+            <p className="mt-2 text-[0.93rem] text-muted">
+              Or report in the foreground until stopped, with{' '}
+              <code className="font-mono text-[0.87rem]">{RUN_COMMAND}</code>.
+            </p>
+          </div>
+        </div>
+      </details>
       <div className="border-t border-rule pt-4">
         <p role="status" className="text-muted">
           Waiting for the machine. This page looks every few seconds and moves on by itself when it joins

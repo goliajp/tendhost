@@ -8,6 +8,7 @@ import {
   type InputHTMLAttributes,
   type ReactNode,
   type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
 } from 'react'
 import { Link } from 'react-router'
 import { explain } from './api'
@@ -81,6 +82,23 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={`${INPUT} ${props.className ?? ''}`} />
 }
 
+export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea {...props} className={`${INPUT} ${props.className ?? ''}`} />
+}
+
+/** A state in words, with the one mark that separates good, bad and
+ *  undecided at a glance. */
+export function StateTag({ tone, children }: { tone: 'live' | 'down' | 'quiet'; children: ReactNode }) {
+  const mark =
+    tone === 'live' ? 'bg-live border-live' : tone === 'down' ? 'bg-transparent border-down' : 'bg-transparent border-rule'
+  return (
+    <span className="inline-flex items-baseline gap-2">
+      <span aria-hidden className={`inline-block h-2.5 w-2.5 translate-y-[1px] rounded-[2px] border-2 ${mark}`} />
+      <span className={tone === 'down' ? 'text-down' : ''}>{children}</span>
+    </span>
+  )
+}
+
 export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
   return <select {...props} className={`${INPUT} ${props.className ?? ''}`} />
 }
@@ -125,10 +143,24 @@ export function PageHeader({ title, lead, actions }: { title: string; lead?: Rea
   )
 }
 
-export function Section({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
+/** A titled part of a page. `ruled={false}` leaves out the line under the
+ *  title, for content that begins with a ruled list of its own. */
+export function Section({
+  title,
+  aside,
+  ruled = true,
+  children,
+}: {
+  title: string
+  aside?: ReactNode
+  ruled?: boolean
+  children: ReactNode
+}) {
   return (
     <section className="mt-10 first:mt-0">
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3 border-b border-rule pb-2">
+      <div
+        className={`mb-3 flex flex-wrap items-baseline justify-between gap-3 ${ruled ? 'border-b border-rule pb-2' : ''}`}
+      >
         <h2 className="text-[1.1rem] font-semibold">{title}</h2>
         {aside}
       </div>
@@ -181,6 +213,25 @@ export function Copyable({ value, label }: { value: string; label: string }) {
 /** A rule-separated list of rows; the page decides what a row holds. */
 export function Rows({ children }: { children: ReactNode }) {
   return <ul className="m-0 list-none divide-y divide-rule border-y border-rule p-0">{children}</ul>
+}
+
+/** One numbered step of a wizard. The number is the order to do them in. */
+export function WizardStep({ n, title, active, children }: { n: number; title: string; active: boolean; children: ReactNode }) {
+  return (
+    <li className="grid grid-cols-[2rem_1fr] gap-x-3" aria-current={active ? 'step' : undefined}>
+      <span
+        className={`tabular flex h-7 w-7 items-center justify-center rounded-full border text-[0.87rem] font-medium ${
+          active ? 'border-live bg-live text-surface' : 'border-rule text-muted'
+        }`}
+      >
+        {n}
+      </span>
+      <div className="min-w-0">
+        <h2 className={`mb-3 text-[1.1rem] font-semibold ${active ? '' : 'text-muted'}`}>{title}</h2>
+        {children}
+      </div>
+    </li>
+  )
 }
 
 export function Forbidden() {

@@ -18,12 +18,15 @@ export interface Host {
   mode: Mode
   labels: string[]
   enrolled_at: string
+  /** the enrollment that admitted it */
+  enrollment_id: string
   facts: Facts
   facts_at: string
 }
 
 /** an enrollment at the one moment its token is known */
 export interface NewEnrollment {
+  id: string
   token: string
   expires_at: string
 }

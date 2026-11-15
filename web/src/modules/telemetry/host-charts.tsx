@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { bytes } from '@/kit/format'
 import { Loading, Problem, Section } from '@/kit/ui'
 import { useResource } from '@/kit/use-resource'
 import { telemetryApi } from './api'
 import { LineChart } from './chart'
-import { diskUse, mounts, seriesOf } from './series'
+import { diskUse, mounts, pointsFor, seriesOf } from './series'
 
 const RANGES = [
   { id: '1h', label: '1 hour', ms: 3600_000 },
@@ -18,6 +18,7 @@ const REFRESH_MS = 30_000
 
 /** Fills `host.sections`: load, memory and each disk over a chosen range. */
 export function HostCharts({ hostId }: { hostId: string }) {
+  const holder = useRef<HTMLDivElement | null>(null)
   const [rangeId, setRangeId] = useState<RangeId>('1h')
   const range = RANGES.find((r) => r.id === rangeId)!
   // the window is fixed at each load, so the charts and their data agree
@@ -28,7 +29,9 @@ export function HostCharts({ hostId }: { hostId: string }) {
     async () => {
       const to = Date.now()
       const from = to - range.ms
-      const loaded = await telemetryApi.samples(hostId, new Date(from))
+      // two charts side by side on a wide page, one on a narrow one
+      const width = holder.current?.clientWidth ?? 0
+      const loaded = await telemetryApi.samples(hostId, new Date(from), pointsFor(width >= 900 ? width / 2 : width))
       setWindow({ from, to })
       return loaded
     },
@@ -64,6 +67,7 @@ export function HostCharts({ hostId }: { hostId: string }) {
         </div>
       }
     >
+      <div ref={holder} />
       {samples.error ? (
         <div className="mb-4">
           <Problem error={samples.error} retry={samples.reload} />
