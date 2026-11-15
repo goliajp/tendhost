@@ -15,6 +15,7 @@ tendhost-protocol.workspace = true
 anyhow.workspace = true
 chrono.workspace = true
 clap.workspace = true
+libc.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -105,6 +105,11 @@ impl ApiError {
                 self.0.to_string(),
             ),
             Error::Forbidden => (StatusCode::FORBIDDEN, "forbidden", self.0.to_string()),
+            Error::Throttled { .. } => (
+                StatusCode::TOO_MANY_REQUESTS,
+                "throttled",
+                self.0.to_string(),
+            ),
             // the cause goes to the log, not to the caller
             Error::Internal(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,

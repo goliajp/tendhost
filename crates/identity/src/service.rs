@@ -6,8 +6,8 @@ use tendhost_store::Keyspace;
 
 use crate::events::{OwnerCreated, SignedIn, TokenCreated, TokenRevoked, UserCreated, UserRemoved};
 use crate::model::{
-    NewToken, SESSION_LIFETIME, Session, StoredToken, StoredUser, Token, User, check_label,
-    check_password, normalize_name,
+    FAILURE_WINDOW, Failures, LOCKOUT, MAX_FAILURES, NewToken, SESSION_LIFETIME, Session,
+    StoredToken, StoredUser, Token, User, check_label, check_password, normalize_name,
 };
 use crate::password;
 use crate::repo::Repo;
@@ -85,21 +85,33 @@ impl Identity {
         Ok((user, session))
     }
 
-    /// A wrong name and a wrong password are the same failure to the caller.
+    /// A wrong name and a wrong password are the same failure to the
+    /// caller, and both count toward locking the name.
     pub fn sign_in(&self, name: &str, password: &str) -> Result<(User, String)> {
-        let stored = match normalize_name(name) {
-            Ok(name) => self.repo.user_by_name(&name)?,
-            Err(_) => None,
-        };
-        let Some(stored) = stored else {
-            // spend the same time as a real check so the answer does not
-            // reveal whether the name exists
-            password::verify(password, dummy_hash());
+        let Ok(name) = normalize_name(name) else {
             return Err(Error::Unauthenticated);
         };
-        if !password::verify(password, &stored.password_hash) {
-            return Err(Error::Unauthenticated);
+        let now = self.clock.now();
+        let failures = self.repo.failures(&name)?;
+        if let Some(until) = failures.as_ref().and_then(|f| f.locked_until)
+            && until > now
+        {
+            return Err(Error::Throttled {
+                retry_after_secs: (until - now).num_seconds().max(1) as u64,
+            });
         }
+        let stored = self.repo.user_by_name(&name)?;
+        // an unknown name still costs one hash, so the time taken does not
+        // reveal whether the name exists
+        let hash = stored
+            .as_ref()
+            .map_or(dummy_hash(), |s| s.password_hash.as_str());
+        let verified = password::verify(password, hash);
+        let Some(stored) = stored.filter(|_| verified) else {
+            self.count_failure(&name, failures)?;
+            return Err(Error::Unauthenticated);
+        };
+        self.repo.clear_failures(&name)?;
         let session = self.open_session(&stored.user)?;
         self.bus.publish(
             Actor::User(stored.user.id.clone()),
@@ -108,6 +120,26 @@ impl Identity {
             },
         );
         Ok((stored.user, session))
+    }
+
+    fn count_failure(&self, name: &str, earlier: Option<Failures>) -> Result<()> {
+        let now = self.clock.now();
+        let mut failures = earlier
+            .filter(|f| f.first_at + FAILURE_WINDOW > now)
+            .unwrap_or(Failures {
+                count: 0,
+                first_at: now,
+                locked_until: None,
+            });
+        failures.count += 1;
+        if failures.count >= MAX_FAILURES {
+            failures = Failures {
+                count: 0,
+                first_at: now,
+                locked_until: Some(now + LOCKOUT),
+            };
+        }
+        self.repo.put_failures(name, &failures)
     }
 
     pub fn sign_out(&self, session: &str) -> Result<()> {
@@ -435,6 +467,58 @@ mod tests {
             Err(Error::Unauthenticated)
         ));
         assert!(f.identity.sign_in(" Owner ", PASSWORD).is_ok());
+    }
+
+    #[test]
+    fn repeated_wrong_passwords_lock_the_name_for_a_while() {
+        let (f, _) = with_owner();
+        for _ in 0..MAX_FAILURES {
+            assert!(matches!(
+                f.identity.sign_in("owner", "wrong password"),
+                Err(Error::Unauthenticated)
+            ));
+        }
+        assert!(matches!(
+            f.identity.sign_in("owner", PASSWORD),
+            Err(Error::Throttled { .. })
+        ));
+        f.clock.advance(LOCKOUT - Duration::seconds(1));
+        assert!(matches!(
+            f.identity.sign_in("owner", PASSWORD),
+            Err(Error::Throttled {
+                retry_after_secs: 1
+            })
+        ));
+        f.clock.advance(Duration::seconds(1));
+        assert!(f.identity.sign_in("owner", PASSWORD).is_ok());
+    }
+
+    #[test]
+    fn failures_are_forgotten_after_a_success_or_when_they_are_old() {
+        let (f, _) = with_owner();
+        for _ in 0..MAX_FAILURES - 1 {
+            f.identity.sign_in("owner", "wrong password").unwrap_err();
+        }
+        f.identity.sign_in("owner", PASSWORD).unwrap();
+        for _ in 0..MAX_FAILURES - 1 {
+            f.identity.sign_in("owner", "wrong password").unwrap_err();
+        }
+        f.clock.advance(FAILURE_WINDOW);
+        f.identity.sign_in("owner", "wrong password").unwrap_err();
+        assert!(f.identity.sign_in("owner", PASSWORD).is_ok());
+    }
+
+    #[test]
+    fn an_unknown_name_locks_like_a_known_one() {
+        let (f, _) = with_owner();
+        for _ in 0..MAX_FAILURES {
+            f.identity.sign_in("nobody", PASSWORD).unwrap_err();
+        }
+        assert!(matches!(
+            f.identity.sign_in("nobody", PASSWORD),
+            Err(Error::Throttled { .. })
+        ));
+        assert!(f.identity.sign_in("owner", PASSWORD).is_ok());
     }
 
     #[test]

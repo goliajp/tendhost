@@ -4,5 +4,6 @@
 pub mod client;
 pub mod collect;
 pub mod config;
+pub mod exec;
 pub mod outbox;
 pub mod run;

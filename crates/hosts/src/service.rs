@@ -120,6 +120,16 @@ impl Hosts {
         self.repo.put_host(&host)
     }
 
+    /// What the host lets the server do. For other parts of the server,
+    /// not for a caller of the api.
+    pub fn mode(&self, host_id: &str) -> Result<Mode> {
+        Ok(self
+            .repo
+            .host(host_id)?
+            .ok_or(Error::NotFound { kind: "host" })?
+            .mode)
+    }
+
     pub fn hosts(&self, principal: &Principal) -> Result<Vec<Host>> {
         principal.require(Role::Viewer)?;
         self.repo.hosts()

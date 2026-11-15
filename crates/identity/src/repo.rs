@@ -1,7 +1,7 @@
 use tendhost_kernel::Result;
 use tendhost_store::Keyspace;
 
-use crate::model::{Session, StoredToken, StoredUser};
+use crate::model::{Failures, Session, StoredToken, StoredUser};
 
 const USERS: &str = "users";
 const TOKENS: &str = "tokens";
@@ -9,7 +9,8 @@ const SETUP: &str = "setup-token";
 
 /// Keys: `user:<id>`, `user-name:<name>` → id, `users` (by creation),
 /// `session:<fingerprint>`, `token:<id>`, `token-fp:<fingerprint>` → id,
-/// `tokens` (by creation), `setup-token` → fingerprint.
+/// `tokens` (by creation), `setup-token` → fingerprint,
+/// `failures:<name>`.
 pub(crate) struct Repo {
     ks: Keyspace,
 }
@@ -116,6 +117,18 @@ impl Repo {
         self.ks
             .delete(&format!("token:{}", token.token.id))
             .map(|_| ())
+    }
+
+    pub fn failures(&self, name: &str) -> Result<Option<Failures>> {
+        self.ks.get(&format!("failures:{name}"))
+    }
+
+    pub fn put_failures(&self, name: &str, failures: &Failures) -> Result<()> {
+        self.ks.put(&format!("failures:{name}"), failures)
+    }
+
+    pub fn clear_failures(&self, name: &str) -> Result<()> {
+        self.ks.delete(&format!("failures:{name}")).map(|_| ())
     }
 
     pub fn put_setup_fingerprint(&self, fingerprint: &str) -> Result<()> {
