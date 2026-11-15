@@ -2282,7 +2282,7 @@ dependencies = [
 
 [[package]]
 name = "tendhost-agents"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "chrono",
@@ -2295,7 +2295,7 @@ dependencies = [
 
 [[package]]
 name = "tendhost-alerts"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "chrono",
@@ -2308,7 +2308,7 @@ dependencies = [
 
 [[package]]
 name = "tendhost-audit"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "chrono",
@@ -2322,7 +2322,7 @@ dependencies = [
 
 [[package]]
 name = "tendhost-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -2341,7 +2341,7 @@ dependencies = [
 
 [[package]]
 name = "tendhost-gateway"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "tendhost-agents",
@@ -2355,7 +2355,7 @@ dependencies = [
 
 [[package]]
 name = "tendhost-hostd"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -2379,7 +2379,7 @@ dependencies = [
 
 [[package]]
 name = "tendhost-hosts"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "chrono",
@@ -2391,7 +2391,7 @@ dependencies = [
 
 [[package]]
 name = "tendhost-http"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "serde_json",
@@ -2401,7 +2401,7 @@ dependencies = [
 
 [[package]]
 name = "tendhost-identity"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "argon2",
  "axum",
@@ -2416,7 +2416,7 @@ dependencies = [
 
 [[package]]
 name = "tendhost-jobs"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "chrono",
@@ -2430,7 +2430,7 @@ dependencies = [
 
 [[package]]
 name = "tendhost-kernel"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "data-encoding",
@@ -2444,7 +2444,7 @@ dependencies = [
 
 [[package]]
 name = "tendhost-notify"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "chrono",
@@ -2461,7 +2461,7 @@ dependencies = [
 
 [[package]]
 name = "tendhost-protocol"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "serde",
@@ -2470,7 +2470,7 @@ dependencies = [
 
 [[package]]
 name = "tendhost-server"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -2499,7 +2499,7 @@ dependencies = [
 
 [[package]]
 name = "tendhost-store"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "kevy-embedded",
  "serde",
@@ -2510,7 +2510,7 @@ dependencies = [
 
 [[package]]
 name = "tendhost-telemetry"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "chrono",
