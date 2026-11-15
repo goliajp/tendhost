@@ -34,6 +34,8 @@ pub struct Host {
     pub mode: Mode,
     pub labels: Vec<String>,
     pub enrolled_at: Timestamp,
+    /// the enrollment that admitted it, as [`NewEnrollment::id`] named it
+    pub enrollment_id: String,
     pub facts: Facts,
     /// when the host last reported `facts`
     pub facts_at: Timestamp,
@@ -49,6 +51,9 @@ pub(crate) struct Enrollment {
 /// An enrollment at the one moment its token is known.
 #[derive(Debug, Clone, Serialize)]
 pub struct NewEnrollment {
+    /// carried by the host this enrollment admits, so whoever opened it
+    /// can recognise that host
+    pub id: String,
     pub token: String,
     pub expires_at: Timestamp,
 }

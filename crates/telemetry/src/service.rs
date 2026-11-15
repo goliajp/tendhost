@@ -5,7 +5,7 @@ use tendhost_kernel::{Actor, Bus, Clock, Envelope, Principal, Result, Role, Sink
 use tendhost_store::Keyspace;
 
 use crate::events::{DiskUse, HostOffline, HostOnline, SampleRecorded};
-use crate::model::{OFFLINE_AFTER, Presence, RETENTION, Sample};
+use crate::model::{OFFLINE_AFTER, Presence, RETENTION, Sample, thin};
 
 const PRESENT: &str = "present";
 
@@ -119,19 +119,23 @@ impl Telemetry {
         Ok(all)
     }
 
-    /// A host's samples from `since` on, oldest first.
+    /// A host's samples from `since` on, oldest first, thinned to at most
+    /// `points` when there are more (0 for all of them).
     pub fn samples(
         &self,
         principal: &Principal,
         host_id: &str,
         since: Timestamp,
+        points: usize,
     ) -> Result<Vec<Sample>> {
         principal.require(Role::Viewer)?;
-        self.ks
+        let samples: Result<Vec<Sample>> = self
+            .ks
             .index_range(&series_key(host_id), since.timestamp_millis(), i64::MAX)?
             .iter()
             .map(|member| serde_json::from_str(member).map_err(tendhost_kernel::Error::internal))
-            .collect()
+            .collect();
+        Ok(thin(samples?, points))
     }
 
     fn forget(&self, host_id: &str) -> Result<()> {
@@ -313,7 +317,7 @@ mod tests {
             .unwrap();
         f.telemetry.record("host_b", &sample(t0, 9.0)).unwrap();
         let loads = |since| {
-            let samples = f.telemetry.samples(&viewer(), "host_a", since).unwrap();
+            let samples = f.telemetry.samples(&viewer(), "host_a", since, 0).unwrap();
             samples.iter().map(|s| s.load1).collect::<Vec<_>>()
         };
         assert_eq!(loads(t0), [0.0, 1.0, 2.0]);
@@ -329,7 +333,7 @@ mod tests {
         f.telemetry
             .record("host_a", &sample(f.clock.now(), 2.0))
             .unwrap();
-        let kept = f.telemetry.samples(&viewer(), "host_a", t0).unwrap();
+        let kept = f.telemetry.samples(&viewer(), "host_a", t0, 0).unwrap();
         assert_eq!(kept.iter().map(|s| s.load1).collect::<Vec<_>>(), [2.0]);
     }
 
@@ -349,7 +353,7 @@ mod tests {
         );
         assert!(
             f.telemetry
-                .samples(&viewer(), "host_a", t0)
+                .samples(&viewer(), "host_a", t0, 0)
                 .unwrap()
                 .is_empty()
         );

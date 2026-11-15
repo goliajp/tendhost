@@ -154,6 +154,12 @@ impl Identity {
         Ok(self.repo.user(id)?.ok_or(Error::Unauthenticated)?.user)
     }
 
+    /// What a user is called; `None` when there is no such user. For
+    /// other parts of the server.
+    pub fn user_name(&self, user_id: &str) -> Result<Option<String>> {
+        Ok(self.repo.user(user_id)?.map(|stored| stored.user.name))
+    }
+
     pub fn users(&self, principal: &Principal) -> Result<Vec<User>> {
         principal.require(Role::Admin)?;
         Ok(self.repo.users()?.into_iter().map(|u| u.user).collect())

@@ -29,6 +29,14 @@ pub fn router(telemetry: Arc<Telemetry>, clock: Arc<dyn Clock>) -> Router {
 struct Window {
     /// default: one hour ago
     since: Option<Timestamp>,
+    /// at most this many samples, averaged over equal stretches of time;
+    /// default 300, 0 for every sample
+    #[serde(default = "default_points")]
+    points: usize,
+}
+
+fn default_points() -> usize {
+    300
 }
 
 async fn presence(
@@ -47,5 +55,10 @@ async fn samples(
     let since = window
         .since
         .unwrap_or_else(|| ctx.clock.now() - Duration::hours(1));
-    Ok(Json(ctx.telemetry.samples(&principal, &id, since)?))
+    Ok(Json(ctx.telemetry.samples(
+        &principal,
+        &id,
+        since,
+        window.points,
+    )?))
 }
