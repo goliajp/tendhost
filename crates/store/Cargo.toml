@@ -1,0 +1,14 @@
+[package]
+name = "tendhost-store"
+description = "The embedded store of tendhost, handed out to each module as its own keyspace"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+tendhost-kernel.workspace = true
+kevy-embedded.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true

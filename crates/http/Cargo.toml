@@ -1,0 +1,13 @@
+[package]
+name = "tendhost-http"
+description = "What the http adapters of tendhost modules share: error responses, credentials, the signed-in principal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+tendhost-kernel.workspace = true
+axum.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
