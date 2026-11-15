@@ -111,7 +111,9 @@ async fn execute(cli: Cli) -> Result<()> {
                 config.host_id,
                 path.display()
             );
-            println!("Start reporting with: tendhostd run");
+            println!(
+                "Keep it reporting with: tendhostd install (as a service), or tendhostd run (in this terminal)"
+            );
             Ok(())
         }
         Command::Run => {

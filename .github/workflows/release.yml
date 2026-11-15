@@ -1,0 +1,75 @@
+name: release
+
+# A tag v<version> publishes the binaries the install script downloads and
+# the server image. The version in Cargo.toml must match the tag.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  linux:
+    strategy:
+      matrix:
+        include:
+          - { runner: ubuntu-latest, arch: x86_64 }
+          - { runner: ubuntu-24.04-arm, arch: aarch64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: the tag matches the workspace version
+        run: test "v$(grep -m1 '^version = ' Cargo.toml | cut -d '"' -f 2)" = "$GITHUB_REF_NAME"
+      - run: docker build --target artifacts --output type=local,dest=out .
+      - name: name the binaries after their platform
+        run: |
+          cd out
+          for bin in tendhost-server tendhostd tendhost; do
+            mv "$bin" "$bin-linux-${{ matrix.arch }}"
+            sha256sum "$bin-linux-${{ matrix.arch }}" > "$bin-linux-${{ matrix.arch }}.sha256"
+          done
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: rustup toolchain install stable --profile minimal && rustup default stable
+      - run: cd web && bun install --frozen-lockfile && bun run build
+      - run: cargo build --release --locked -p tendhost-server --features tendhost-server/web -p tendhost-hostd -p tendhost-cli
+      - name: name the binaries after their platform
+        run: |
+          mkdir out
+          for bin in tendhost-server tendhostd tendhost; do
+            cp "target/release/$bin" "out/$bin-macos-aarch64"
+            (cd out && shasum -a 256 "$bin-macos-aarch64" > "$bin-macos-aarch64.sha256")
+          done
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            ghcr.io/${{ github.repository }}:latest
