@@ -18,7 +18,7 @@ async fn main() -> Result<()> {
         .with_context(|| format!("creating the data directory {}", config.data_dir.display()))?;
     let store = Store::open(&config.data_dir)?;
     let settings = tendhost_server::Settings {
-        public_url: config.url(),
+        public_url: config.public_url.clone(),
         secure_cookies: config.served_over_https(),
     };
     let app = Arc::new(tendhost_server::assemble(

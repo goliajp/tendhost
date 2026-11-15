@@ -60,8 +60,9 @@ the server printed when it started, and creates the owner account. The
 token works once.
 
 Hosts must be able to reach the server at the address you open the
-dashboard with. Behind a reverse proxy, set `TENDHOST_PUBLIC_URL` to the
-public address.
+dashboard with: the install command a new host runs names that address.
+Behind a reverse proxy, either have the proxy send `X-Forwarded-Host` and
+`X-Forwarded-Proto`, or set `TENDHOST_PUBLIC_URL` to the public address.
 
 ### Configuration
 
