@@ -4,6 +4,11 @@ use tendhost_kernel::{Error, Result, Role, Timestamp};
 
 pub const SESSION_LIFETIME: Duration = Duration::days(30);
 pub const MIN_PASSWORD_CHARS: usize = 10;
+/// This many wrong passwords for one name within [`FAILURE_WINDOW`] lock
+/// sign-in for that name for [`LOCKOUT`].
+pub const MAX_FAILURES: u32 = 5;
+pub const FAILURE_WINDOW: Duration = Duration::minutes(15);
+pub const LOCKOUT: Duration = Duration::minutes(15);
 const MAX_NAME_CHARS: usize = 64;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -25,6 +30,14 @@ pub(crate) struct StoredUser {
 pub(crate) struct Session {
     pub user_id: String,
     pub expires_at: Timestamp,
+}
+
+/// Wrong passwords recently tried for one name.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct Failures {
+    pub count: u32,
+    pub first_at: Timestamp,
+    pub locked_until: Option<Timestamp>,
 }
 
 /// An api token as it is listed: everything but the secret.

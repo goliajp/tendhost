@@ -1,5 +1,7 @@
 use std::collections::VecDeque;
+use std::path::Path;
 
+use anyhow::{Context, Result};
 use tendhost_protocol::Report;
 
 /// Reports waiting to reach the server. They stay until a sync succeeds,
@@ -33,6 +35,38 @@ impl Outbox {
     /// Drops the `count` oldest: the ones a successful sync just carried.
     pub fn sent(&mut self, count: usize) {
         self.reports.drain(..count.min(self.reports.len()));
+    }
+
+    /// Makes `path` hold exactly what is waiting: no file when nothing is.
+    /// In normal operation every sync empties the outbox, so the disk is
+    /// only written while the server cannot be reached.
+    pub fn persist(&self, path: &Path) -> Result<()> {
+        if self.reports.is_empty() {
+            return match std::fs::remove_file(path) {
+                Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                    Err(error).with_context(|| format!("removing {}", path.display()))
+                }
+                _ => Ok(()),
+            };
+        }
+        let text = serde_json::to_vec(&self.reports).context("encoding the waiting reports")?;
+        let partial = path.with_extension("partial");
+        std::fs::write(&partial, text).with_context(|| format!("writing {}", partial.display()))?;
+        std::fs::rename(&partial, path).with_context(|| format!("replacing {}", path.display()))
+    }
+
+    /// The outbox a previous run of the daemon left at `path`.
+    pub fn restore(path: &Path, capacity: usize) -> Result<Self> {
+        let mut outbox = Self::new(capacity);
+        let text = match std::fs::read(path) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(outbox),
+            Err(error) => return Err(error).with_context(|| format!("reading {}", path.display())),
+        };
+        let reports: Vec<Report> = serde_json::from_slice(&text)
+            .with_context(|| format!("{} is not a saved outbox", path.display()))?;
+        reports.into_iter().for_each(|report| outbox.push(report));
+        Ok(outbox)
     }
 
     pub fn len(&self) -> usize {
@@ -73,6 +107,32 @@ mod tests {
         assert_eq!(outbox.batch(10), [report(2)]);
         outbox.sent(5);
         assert!(outbox.is_empty());
+    }
+
+    #[test]
+    fn waiting_reports_survive_a_restart_and_the_file_goes_when_they_are_sent() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("outbox.json");
+        assert!(Outbox::restore(&path, 10).unwrap().is_empty());
+
+        let mut outbox = Outbox::new(10);
+        (0..3).for_each(|n| outbox.push(report(n)));
+        outbox.persist(&path).unwrap();
+        let mut restored = Outbox::restore(&path, 10).unwrap();
+        assert_eq!(restored.batch(10), [report(0), report(1), report(2)]);
+
+        restored.sent(3);
+        restored.persist(&path).unwrap();
+        assert!(!path.exists());
+        restored.persist(&path).unwrap();
+    }
+
+    #[test]
+    fn a_damaged_file_is_reported_and_not_silently_dropped() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("outbox.json");
+        std::fs::write(&path, "{ not json").unwrap();
+        assert!(Outbox::restore(&path, 10).is_err());
     }
 
     #[test]

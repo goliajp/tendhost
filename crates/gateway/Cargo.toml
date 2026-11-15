@@ -12,4 +12,6 @@ tendhost-http.workspace = true
 tendhost-protocol.workspace = true
 tendhost-hosts.workspace = true
 tendhost-telemetry.workspace = true
+tendhost-jobs.workspace = true
+tendhost-agents.workspace = true
 axum.workspace = true
