@@ -1,27 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import type { Sample } from './api'
-import { diskUse, downsample, linear, mounts, nearest, niceCeil, pathOf, segments, seriesOf, typicalGap } from './series'
+import { diskUse, linear, mounts, nearest, niceCeil, pathOf, pointsFor, segments, seriesOf, typicalGap } from './series'
 
 const every = (n: number, step: number, v = (i: number) => i) =>
   Array.from({ length: n }, (_, i) => ({ t: i * step, v: v(i) }))
 
-describe('downsample', () => {
-  it('leaves a short series alone', () => {
-    const points = every(5, 30)
-    expect(downsample(points, 0, 150, 10)).toEqual(points)
-  })
-
-  it('averages each span and keeps the count within the limit', () => {
-    const out = downsample(every(100, 10), 0, 1000, 10)
-    expect(out).toHaveLength(10)
-    expect(out[0]).toEqual({ t: 45, v: 4.5 })
-    expect(out[9]).toEqual({ t: 945, v: 94.5 })
-  })
-
-  it('makes no point for a span without samples', () => {
-    const points = [...every(50, 10), ...every(50, 10).map((p) => ({ t: p.t + 5000, v: p.v }))]
-    const out = downsample(points, 0, 5500, 11)
-    expect(out.map((p) => Math.floor(p.t / 500))).toEqual([0, 10])
+describe('pointsFor', () => {
+  it('asks for a point per three pixels, within bounds', () => {
+    expect(pointsFor(600)).toBe(200)
+    expect(pointsFor(90)).toBe(60)
+    expect(pointsFor(5000)).toBe(400)
+    expect(pointsFor(0)).toBe(60)
   })
 })
 

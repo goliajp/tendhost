@@ -6,6 +6,7 @@ export type ErrorCode =
   | 'invalid'
   | 'unauthenticated'
   | 'forbidden'
+  | 'throttled'
   | 'internal'
   | 'unreachable'
 
@@ -87,6 +88,7 @@ export const api = {
   probe: <T>(path: string) => request<T>('GET', path, undefined, true),
   post: <T>(path: string, body?: unknown, quiet401 = false) => request<T>('POST', path, body, quiet401),
   patch: <T>(path: string, body: unknown) => request<T>('PATCH', path, body),
+  put: <T>(path: string, body: unknown) => request<T>('PUT', path, body),
   delete: (path: string) => request<void>('DELETE', path),
 }
 

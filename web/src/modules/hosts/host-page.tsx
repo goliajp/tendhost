@@ -51,6 +51,7 @@ function Details({ host, reload }: { host: Host; reload: () => Promise<void> }) 
         </Link>
       </p>
       <PageHeader title={host.name} lead={<Slot name="host.state" hostId={host.id} />} />
+      <Slot name="host.notices" hostId={host.id} />
 
       <Section title="What it says about itself" aside={<Reported at={host.facts_at} />}>
         <dl className="m-0 grid grid-cols-[minmax(8rem,auto)_1fr] gap-x-6 gap-y-1.5">

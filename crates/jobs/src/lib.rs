@@ -14,6 +14,6 @@ mod service;
 
 pub use events::{JobChanged, JobCreated, JobRemoved, RunFinished, RunRequested};
 pub use http::router;
-pub use model::{Assignment, Job, NewJob, Outcome, Run, RunState, Schedule};
+pub use model::{Assignment, Job, LastRun, NewJob, Outcome, Run, RunState, Schedule};
 pub use ports::HostDirectory;
 pub use service::Jobs;

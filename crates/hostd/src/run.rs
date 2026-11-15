@@ -38,6 +38,9 @@ pub struct Reporter {
     /// the agents the server asked the detail of
     tracked: Vec<String>,
     agents_due: Instant,
+    /// the server just changed what it tracks: the next look reads the
+    /// longer history once
+    backfill: bool,
 }
 
 impl Reporter {
@@ -60,6 +63,7 @@ impl Reporter {
             homes,
             tracked: Vec::new(),
             agents_due: Instant::now(),
+            backfill: false,
         })
     }
 
@@ -108,8 +112,13 @@ impl Reporter {
         let (homes, tracked) = (self.homes.clone(), self.tracked.clone());
         let now = Utc::now();
         // reading session logs can take seconds on a busy machine
+        let days = if std::mem::take(&mut self.backfill) {
+            agents::BACKFILL_DAYS
+        } else {
+            agents::RECOUNT_DAYS
+        };
         let found =
-            tokio::task::spawn_blocking(move || agents::collect(&homes, &tracked, now)).await;
+            tokio::task::spawn_blocking(move || agents::collect(&homes, &tracked, now, days)).await;
         if let Ok(agents) = found {
             self.outbox.push(Report {
                 at: now,
@@ -182,6 +191,7 @@ impl Reporter {
             Directive::TrackAgents { agents } => {
                 if agents != self.tracked {
                     self.tracked = agents;
+                    self.backfill = true;
                     self.agents_due = Instant::now();
                     self.wake.notify_one();
                 }

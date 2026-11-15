@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { Host } from './api'
-import { byName, enrollCommand, joinedSince, labelToAdd, sendsCredentialInClear, shellQuote } from './rules'
+import { admittedBy, byName, enrollCommand, installCommand, labelToAdd, sendsCredentialInClear, shellQuote } from './rules'
 
-const host = (id: string, name = id): Host => ({
+const host = (id: string, name = id, enrollment_id = `enr_${id}`): Host => ({
   id,
   name,
+  enrollment_id,
   mode: 'observe',
   labels: [],
   enrolled_at: '2026-01-01T00:00:00Z',
@@ -53,11 +54,22 @@ describe('sendsCredentialInClear', () => {
   })
 })
 
-describe('joinedSince', () => {
-  it('finds the hosts that appeared after the wizard started', () => {
-    expect(joinedSince(['a'], [host('a'), host('b')]).map((h) => h.id)).toEqual(['b'])
-    expect(joinedSince(['a', 'b'], [host('a'), host('b')])).toEqual([])
-    expect(joinedSince(['a', 'gone'], [host('a')])).toEqual([])
+describe('installCommand', () => {
+  it('pipes the script of this server into sh with the token', () => {
+    expect(installCommand('https://tend.example.com', 'the_abc', 'observe')).toBe(
+      'curl -fsSL https://tend.example.com/install.sh | sh -s -- --token the_abc',
+    )
+    expect(installCommand('https://tend.example.com', 'the_abc', 'manage')).toBe(
+      'curl -fsSL https://tend.example.com/install.sh | sh -s -- --token the_abc --manage',
+    )
+  })
+})
+
+describe('admittedBy', () => {
+  it('recognises the host this enrollment admitted, whoever else joined meanwhile', () => {
+    const hosts = [host('a', 'a', 'enr_other'), host('b', 'b', 'enr_mine')]
+    expect(admittedBy('enr_mine', hosts)?.id).toBe('b')
+    expect(admittedBy('enr_unused', hosts)).toBeNull()
   })
 })
 

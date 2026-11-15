@@ -124,6 +124,15 @@ pub struct Job {
     /// when the schedule next asks for a run; absent for a manual job, a
     /// disabled one, and a one-time job that has run
     pub next_run_at: Option<Timestamp>,
+    /// how the newest finished run ended, and when; absent before any
+    #[serde(default)]
+    pub last_run: Option<LastRun>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LastRun {
+    pub state: RunState,
+    pub finished_at: Timestamp,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

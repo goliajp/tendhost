@@ -28,6 +28,7 @@ export function Shell({ children }: { children: ReactNode }) {
               }
             >
               {entry.label}
+              {entry.Count ? <entry.Count /> : null}
             </NavLink>
           ))}
         </nav>

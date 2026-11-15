@@ -34,15 +34,16 @@ export function describe(entry: Pick<Entry, 'topic' | 'payload'>): string {
   return SENTENCES[entry.topic]?.(entry.payload) ?? entry.topic
 }
 
-/** Who did it, as far as this module can tell: the audit log records ids. */
-export function who(actor: Actor, selfId: string): string {
+/** Who did it: the name the server gives, "You" for the reader, and a
+ *  plain statement when the user or host no longer exists. */
+export function who(actor: Actor, name: string | null, selfId: string): string {
   switch (actor.kind) {
     case 'system':
       return 'The server'
     case 'host':
-      return `Host ${actor.id}`
+      return name ? `Host ${name}` : 'A host since removed'
     case 'user':
-      return actor.id === selfId ? 'You' : `User ${actor.id}`
+      return actor.id === selfId ? 'You' : (name ?? 'A user since removed')
   }
 }
 

@@ -29,10 +29,15 @@ suite('describe', () => {
 
 suite('who', () => {
   it('names the kinds of actor and recognises the reader', () => {
-    expect(who({ kind: 'system' }, 'usr_me')).toBe('The server')
-    expect(who({ kind: 'host', id: 'host_1' }, 'usr_me')).toBe('Host host_1')
-    expect(who({ kind: 'user', id: 'usr_me' }, 'usr_me')).toBe('You')
-    expect(who({ kind: 'user', id: 'usr_other' }, 'usr_me')).toBe('User usr_other')
+    expect(who({ kind: 'system' }, null, 'usr_me')).toBe('The server')
+    expect(who({ kind: 'host', id: 'host_1' }, 'web-1', 'usr_me')).toBe('Host web-1')
+    expect(who({ kind: 'user', id: 'usr_me' }, 'owner', 'usr_me')).toBe('You')
+    expect(who({ kind: 'user', id: 'usr_other' }, 'vera', 'usr_me')).toBe('vera')
+  })
+
+  it('says so when the actor no longer exists, instead of showing an id', () => {
+    expect(who({ kind: 'user', id: 'usr_gone' }, null, 'usr_me')).toBe('A user since removed')
+    expect(who({ kind: 'host', id: 'host_gone' }, null, 'usr_me')).toBe('A host since removed')
   })
 })
 

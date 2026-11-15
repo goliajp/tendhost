@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { DASH, clock, dayClock } from '@/kit/format'
-import { downsample, linear, nearest, niceCeil, pathOf, segments, type Point } from './series'
+import { linear, nearest, niceCeil, pathOf, segments, type Point } from './series'
 
 const HEIGHT = 150
 const PAD = { top: 8, right: 8, bottom: 20, left: 60 }
-const MAX_POINTS = 360
 
 function useWidth(): [React.RefObject<HTMLDivElement | null>, number] {
   const ref = useRef<HTMLDivElement | null>(null)
@@ -46,7 +45,7 @@ export function LineChart({
 }) {
   const [ref, width] = useWidth()
   const [hover, setHover] = useState<Point | null>(null)
-  const shown = useMemo(() => downsample(points, from, to, MAX_POINTS), [points, from, to])
+  const shown = points
   const top = ceiling ?? niceCeil(Math.max(0, ...shown.map((p) => p.v)) / unit) * unit
   const x = linear(from, to, PAD.left, Math.max(PAD.left + 1, width - PAD.right))
   const y = linear(0, top, HEIGHT - PAD.bottom, PAD.top)

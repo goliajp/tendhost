@@ -24,6 +24,16 @@ export function enrollCommand(origin: string, token: string, mode: Mode): string
   return `tendhostd enroll --server ${shellQuote(origin)} --token ${shellQuote(token)}${manage}`
 }
 
+/** One line that installs the daemon, joins the server and starts the
+ *  daemon as a service. The script comes from the server itself. */
+export function installCommand(origin: string, token: string, mode: Mode): string {
+  const manage = mode === 'manage' ? ' --manage' : ''
+  return `curl -fsSL ${shellQuote(`${origin}/install.sh`)} | sh -s -- --token ${shellQuote(token)}${manage}`
+}
+
+/** keeps the daemon running across restarts, as a systemd or launchd service */
+export const SERVICE_COMMAND = 'tendhostd install'
+/** reports in the foreground until stopped */
 export const RUN_COMMAND = 'tendhostd run'
 
 /** True when hosts would send their credential to `origin` unencrypted
@@ -33,9 +43,9 @@ export function sendsCredentialInClear(origin: string): boolean {
   return url.protocol === 'http:' && !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
 }
 
-/** The hosts that were not there when the wizard started. */
-export function joinedSince(before: readonly string[], now: readonly Host[]): Host[] {
-  return now.filter((host) => !before.includes(host.id))
+/** The host a given enrollment admitted, once it has joined. */
+export function admittedBy(enrollmentId: string, hosts: readonly Host[]): Host | null {
+  return hosts.find((host) => host.enrollment_id === enrollmentId) ?? null
 }
 
 /** One label as typed, ready to add; null when it adds nothing. */

@@ -6,7 +6,7 @@ use tendhost_store::Keyspace;
 
 use crate::events::{JobChanged, JobCreated, JobRemoved, RunFinished, RunRequested};
 use crate::model::{
-    Assignment, COLLECT_WITHIN, Job, NewJob, Outcome, REPORT_GRACE, Run, RunState, tail,
+    Assignment, COLLECT_WITHIN, Job, LastRun, NewJob, Outcome, REPORT_GRACE, Run, RunState, tail,
 };
 use crate::ports::HostDirectory;
 use crate::repo::Repo;
@@ -55,6 +55,7 @@ impl Jobs {
             enabled: true,
             created_by: principal.actor.clone(),
             created_at: now,
+            last_run: None,
         };
         self.repo.put_job(&job)?;
         self.bus.publish(
@@ -262,6 +263,14 @@ impl Jobs {
 
     fn close(&self, job: &Job, run: Run) -> Result<()> {
         self.repo.put_run(&run)?;
+        // read again: the tick may have moved the job's next run meanwhile
+        if let (Some(mut job), Some(finished_at)) = (self.repo.job(&job.id)?, run.finished_at) {
+            job.last_run = Some(LastRun {
+                state: run.state,
+                finished_at,
+            });
+            self.repo.put_job(&job)?;
+        }
         self.bus.publish(
             Actor::Host(run.host_id.clone()),
             &RunFinished {
@@ -486,6 +495,15 @@ mod tests {
             (RunState::Succeeded, Some(0), "hi\n")
         );
         assert_eq!(stored.requested_by, admin().actor);
+        assert_eq!(
+            f.jobs
+                .job(&viewer(), &job.id)
+                .unwrap()
+                .last_run
+                .unwrap()
+                .state,
+            RunState::Succeeded
+        );
     }
 
     #[test]

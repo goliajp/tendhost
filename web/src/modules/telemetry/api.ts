@@ -22,6 +22,9 @@ export interface Sample {
 
 export const telemetryApi = {
   presence: () => api.get<Presence[]>('/presence'),
-  samples: (hostId: string, since: Date) =>
-    api.get<Sample[]>(`/hosts/${encodeURIComponent(hostId)}/samples?since=${encodeURIComponent(since.toISOString())}`),
+  /** at most `points` samples over the window; the server averages */
+  samples: (hostId: string, since: Date, points: number) =>
+    api.get<Sample[]>(
+      `/hosts/${encodeURIComponent(hostId)}/samples?since=${encodeURIComponent(since.toISOString())}&points=${points}`,
+    ),
 }
