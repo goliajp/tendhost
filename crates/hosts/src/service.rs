@@ -41,10 +41,11 @@ impl Hosts {
         self.bus.publish(
             principal.actor.clone(),
             &EnrollmentOpened {
-                enrollment_id: enrollment.id,
+                enrollment_id: enrollment.id.clone(),
             },
         );
         Ok(NewEnrollment {
+            id: enrollment.id,
             token,
             expires_at: enrollment.expires_at,
         })
@@ -80,6 +81,7 @@ impl Hosts {
             mode,
             labels: Vec::new(),
             enrolled_at: now,
+            enrollment_id: enrollment.id.clone(),
             facts,
             facts_at: now,
         };
@@ -298,6 +300,7 @@ mod tests {
             .enroll(&opened.token, "Web 01", Mode::Manage, facts("web01"))
             .unwrap();
         assert_eq!((host.name.as_str(), host.mode), ("web-01", Mode::Manage));
+        assert_eq!(host.enrollment_id, opened.id);
         assert_eq!(f.hosts.authenticate(&credential).unwrap(), host.id);
         assert!(matches!(
             f.hosts.authenticate("thh_guess"),

@@ -140,10 +140,14 @@ pub fn assemble(store: &Store, clock: Arc<dyn Clock>, settings: Settings) -> Res
     ));
     bus.attach(notify.clone());
 
+    let names = Arc::new(ports::Names {
+        identity: identity.clone(),
+        hosts: hosts.clone(),
+    });
     let authenticator: Arc<dyn Authenticator> = identity.clone();
     let api = Router::new()
         .merge(tendhost_identity::router(identity))
-        .merge(tendhost_audit::router(audit))
+        .merge(tendhost_audit::router(audit, names))
         .merge(tendhost_hosts::router(hosts.clone()))
         .merge(tendhost_telemetry::router(telemetry.clone(), clock))
         .merge(tendhost_jobs::router(jobs.clone()))
