@@ -33,4 +33,3 @@ ENV TENDHOST_DATA=/data TENDHOST_LISTEN=0.0.0.0:7080
 VOLUME /data
 EXPOSE 7080
 ENTRYPOINT ["tendhost-server"]
-||||||| Stash base
