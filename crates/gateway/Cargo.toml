@@ -1,0 +1,15 @@
+[package]
+name = "tendhost-gateway"
+description = "Where tendhostd connects: translates the host protocol into calls on the modules"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+tendhost-kernel.workspace = true
+tendhost-http.workspace = true
+tendhost-protocol.workspace = true
+tendhost-hosts.workspace = true
+tendhost-telemetry.workspace = true
+axum.workspace = true

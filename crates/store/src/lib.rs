@@ -130,6 +130,22 @@ impl Keyspace {
         self.index_range(index, i64::MIN, i64::MAX)
     }
 
+    /// Removes every member with `score <= max`; returns how many.
+    pub fn index_trim(&self, index: &str, max: i64) -> Result<usize> {
+        self.store
+            .zremrangebyscore(&self.key(index), f64::MIN, max as f64)
+            .map_err(Error::internal)
+    }
+
+    /// The highest score in the index; `None` when it is empty.
+    pub fn index_max(&self, index: &str) -> Result<Option<i64>> {
+        let last = self
+            .store
+            .zrange(&self.key(index), -1, -1)
+            .map_err(Error::internal)?;
+        Ok(last.first().map(|(_, score)| *score as i64))
+    }
+
     pub fn index_len(&self, index: &str) -> Result<usize> {
         self.store
             .zcount(&self.key(index), f64::MIN, f64::MAX)
@@ -191,6 +207,10 @@ mod tests {
         assert_eq!(ks.index_all("idx").unwrap(), ["b", "c", "a"]);
         ks.index_remove("idx", "c").unwrap();
         assert_eq!(ks.index_len("idx").unwrap(), 2);
+        assert_eq!(ks.index_max("idx").unwrap(), Some(40));
+        assert_eq!(ks.index_max("none").unwrap(), None);
+        assert_eq!(ks.index_trim("idx", 20).unwrap(), 1);
+        assert_eq!(ks.index_all("idx").unwrap(), ["a"]);
     }
 
     #[test]

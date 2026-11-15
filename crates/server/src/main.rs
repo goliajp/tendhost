@@ -35,6 +35,7 @@ async fn main() -> Result<()> {
         );
     }
 
+    app.spawn_background();
     axum::serve(listener, app.router)
         .with_graceful_shutdown(shutdown())
         .await?;

@@ -6,4 +6,4 @@ mod http;
 mod service;
 
 pub use http::router;
-pub use service::Audit;
+pub use service::{Audit, Entry};
