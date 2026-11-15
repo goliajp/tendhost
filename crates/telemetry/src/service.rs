@@ -4,7 +4,7 @@ use serde::Deserialize;
 use tendhost_kernel::{Actor, Bus, Clock, Envelope, Principal, Result, Role, Sink, Timestamp};
 use tendhost_store::Keyspace;
 
-use crate::events::{HostOffline, HostOnline};
+use crate::events::{DiskUse, HostOffline, HostOnline, SampleRecorded};
 use crate::model::{OFFLINE_AFTER, Presence, RETENTION, Sample};
 
 const PRESENT: &str = "present";
@@ -63,6 +63,23 @@ impl Telemetry {
             .index_put(&series, sample.at.timestamp_millis(), &member)?;
         self.ks
             .index_trim(&series, (self.clock.now() - RETENTION).timestamp_millis())?;
+        let disks = sample
+            .disks
+            .iter()
+            .map(|d| DiskUse {
+                mount: d.mount.clone(),
+                total_bytes: d.total_bytes,
+                used_bytes: d.used_bytes,
+            })
+            .collect();
+        self.bus.publish(
+            Actor::Host(host_id.to_string()),
+            &SampleRecorded {
+                host_id: host_id.to_string(),
+                at: sample.at,
+                disks,
+            },
+        );
         Ok(())
     }
 

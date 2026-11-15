@@ -5,6 +5,7 @@
 use std::sync::Arc;
 
 use tendhost_agents::KnownHosts;
+use tendhost_alerts::HostNames;
 use tendhost_hosts::{Hosts, Mode};
 use tendhost_jobs::HostDirectory;
 use tendhost_kernel::{Error, Result};
@@ -28,5 +29,14 @@ impl KnownHosts for HostsKnown {
             Err(Error::NotFound { .. }) => Ok(false),
             Err(other) => Err(other),
         }
+    }
+}
+
+/// What alerts needs to know about hosts, answered by the hosts module.
+pub(crate) struct HostsNames(pub Arc<Hosts>);
+
+impl HostNames for HostsNames {
+    fn name(&self, host_id: &str) -> Option<String> {
+        self.0.name(host_id).ok().flatten()
     }
 }

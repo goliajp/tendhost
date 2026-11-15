@@ -1,0 +1,79 @@
+@import 'tailwindcss';
+@import '@fontsource/ibm-plex-sans/latin-400.css';
+@import '@fontsource/ibm-plex-sans/latin-500.css';
+@import '@fontsource/ibm-plex-sans/latin-600.css';
+@import '@fontsource/ibm-plex-mono/latin-400.css';
+
+/* Two states carry colour: a host that answers (live), and a host that does
+   not or an action that cannot be undone (down). Everything else is ink on
+   ground. */
+:root {
+  --ground: #eef1ef;
+  --surface: #fbfcfb;
+  --ink: #1b2927;
+  --muted: #5b6b67;
+  --rule: #d3dad6;
+  --live: #17694f;
+  --live-soft: #d9ebe3;
+  --down: #a8492a;
+  --down-soft: #f3e1d8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #101716;
+    --surface: #18211f;
+    --ink: #e3ebe8;
+    --muted: #93a39e;
+    --rule: #2b3835;
+    --live: #56c79f;
+    --live-soft: #173229;
+    --down: #e48d68;
+    --down-soft: #3a231a;
+  }
+}
+
+@theme inline {
+  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --color-ground: var(--ground);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-rule: var(--rule);
+  --color-live: var(--live);
+  --color-live-soft: var(--live-soft);
+  --color-down: var(--down);
+  --color-down-soft: var(--down-soft);
+}
+
+html {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+}
+
+:focus-visible {
+  outline: 2px solid var(--live);
+  outline-offset: 2px;
+}
+
+/* figures line up in columns */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
