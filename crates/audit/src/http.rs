@@ -1,13 +1,11 @@
 use std::sync::Arc;
 
+use crate::service::{Audit, Entry};
 use axum::extract::{Query, State};
 use axum::routing::get;
 use axum::{Json, Router};
 use serde::Deserialize;
 use tendhost_http::{ApiResult, Signed};
-use tendhost_kernel::{Envelope, Timestamp};
-
-use crate::service::Audit;
 
 /// Routes, relative to the api root: `/audit`.
 pub fn router(audit: Arc<Audit>) -> Router {
@@ -18,7 +16,8 @@ pub fn router(audit: Arc<Audit>) -> Router {
 
 #[derive(Deserialize)]
 struct Page {
-    before: Option<Timestamp>,
+    /// a `seq`; entries below it are returned
+    before: Option<i64>,
     #[serde(default = "default_limit")]
     limit: usize,
 }
@@ -31,6 +30,6 @@ async fn entries(
     State(audit): State<Arc<Audit>>,
     Signed(principal): Signed,
     Query(page): Query<Page>,
-) -> ApiResult<Json<Vec<Envelope>>> {
+) -> ApiResult<Json<Vec<Entry>>> {
     Ok(Json(audit.entries(&principal, page.before, page.limit)?))
 }
