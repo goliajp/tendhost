@@ -25,6 +25,7 @@ case "$(uname -m)" in
     aarch64 | arm64) arch=aarch64 ;;
     *) fail "unsupported processor $(uname -m)" ;;
 esac
+[ "$os-$arch" != macos-x86_64 ] || fail "no build is published for Intel Macs; build tendhostd from source"
 case " $* " in
     *" --token "*) ;;
     *) fail "pass the enrollment token: sh -s -- --token <token>" ;;
