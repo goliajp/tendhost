@@ -1,0 +1,14 @@
+[package]
+name = "tendhost-protocol"
+description = "The messages tendhostd and the tendhost server exchange"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+chrono.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

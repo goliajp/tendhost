@@ -1,0 +1,17 @@
+[package]
+name = "tendhost-telemetry"
+description = "What hosts measure and whether they are online"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+tendhost-kernel.workspace = true
+tendhost-store.workspace = true
+tendhost-http.workspace = true
+axum.workspace = true
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
